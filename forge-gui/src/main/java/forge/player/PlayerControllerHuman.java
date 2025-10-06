@@ -2016,6 +2016,118 @@ public class PlayerControllerHuman extends PlayerController implements IGameCont
     // stores saved order for different sets of SpellAbilities
     private final Map<String, List<Integer>> orderedSALookup = Maps.newHashMap();
 
+    /**
+     * Determines if two SpellAbilities are functionally equivalent for ordering purposes.
+     * This is more robust than string comparison as it focuses on the actual effect.
+     */
+    private boolean areFunctionallyEquivalent(SpellAbility sa1, SpellAbility sa2) {
+        // Same exact object
+        if (sa1 == sa2) {
+            return true;
+        }
+
+        // Different API types means different effects
+        if (sa1.getApi() != sa2.getApi()) {
+            return false;
+        }
+
+        // Different trigger types
+        if (sa1.isTrigger() != sa2.isTrigger()) {
+            return false;
+        }
+
+        // For triggers, check if they're the same type of trigger
+        if (sa1.isTrigger() && sa2.isTrigger()) {
+            if (sa1.getTrigger() != null && sa2.getTrigger() != null) {
+                if (!sa1.getTrigger().getClass().equals(sa2.getTrigger().getClass())) {
+                    return false;
+                }
+            }
+        }
+
+        // Different host card names (different sources)
+        if (!sa1.getHostCard().getName().equals(sa2.getHostCard().getName())) {
+            return false;
+        }
+
+        // Different costs
+        if (!sa1.getPayCosts().equals(sa2.getPayCosts())) {
+            return false;
+        }
+
+        // Compare key parameters that affect functionality
+        // We normalize descriptions by removing card IDs and instance-specific information
+        String desc1 = normalizeDescription(sa1.getOriginalDescription());
+        String desc2 = normalizeDescription(sa2.getOriginalDescription());
+
+        if (!desc1.equals(desc2)) {
+            return false;
+        }
+
+        // If targeting is involved, they should have the same targeting restrictions
+        if (sa1.usesTargeting() != sa2.usesTargeting()) {
+            return false;
+        }
+
+        if (sa1.usesTargeting() && sa2.usesTargeting()) {
+            // Compare targeting restrictions in a normalized way
+            String tgt1 = normalizeTargeting(sa1.getTargetRestrictions());
+            String tgt2 = normalizeTargeting(sa2.getTargetRestrictions());
+            if (!tgt1.equals(tgt2)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Normalizes a description string by removing instance-specific information
+     * that doesn't affect the functional equivalence of abilities.
+     */
+    private String normalizeDescription(String description) {
+        if (description == null) {
+            return "";
+        }
+
+        // Remove instance-specific information that appears in brackets
+        String normalized = description.replaceAll("\\s*\\[.*?\\]", "");
+
+        // Normalize whitespace
+        normalized = normalized.replaceAll("\\s+", " ").trim();
+
+        // Remove common variable placeholders that don't affect functionality
+        normalized = normalized.replaceAll("\\bCARDNAME\\b", "[CARD]");
+        normalized = normalized.replaceAll("\\bNICKNAME\\b", "[CARD]");
+        normalized = normalized.replaceAll("\\bORIGINALHOST\\b", "[ORIGINALHOST]");
+
+        return normalized;
+    }
+
+    /**
+     * Normalizes targeting restrictions for comparison.
+     */
+    private String normalizeTargeting(forge.game.spellability.TargetRestrictions tgt) {
+        if (tgt == null) {
+            return "";
+        }
+
+        // Create a normalized representation of targeting restrictions
+        StringBuilder sb = new StringBuilder();
+        sb.append("min:").append(tgt.getMinTargets());
+        sb.append(",max:").append(tgt.getMaxTargets());
+        sb.append(",zone:").append(tgt.getZone());
+
+        // Normalize the valid targets string
+        String[] validTgts = tgt.getValidTgts();
+        if (validTgts != null) {
+            String validTgtsStr = String.join(",", validTgts).replaceAll("\\s+", " ").trim();
+            sb.append(",valid:").append(validTgtsStr);
+        }
+
+        return sb.toString();
+    }
+
     @Override
     public void orderAndPlaySimultaneousSa(final List<SpellAbility> activePlayerSAs) {
         List<SpellAbility> orderedSAs = activePlayerSAs;
@@ -2038,8 +2150,8 @@ public class PlayerControllerHuman extends PlayerController implements IGameCont
                 } else if (currentSa.usesTargeting()) {
                     needPrompt = true;
                 }
-                if (!needPrompt && !saStr.equals(firstStr)) {
-                    // prompt by default unless all abilities are the same
+                if (!needPrompt && !areFunctionallyEquivalent(activePlayerSAs.get(0), currentSa)) {
+                    // prompt by default unless all abilities are functionally the same
                     needPrompt = true;
                 }
 
