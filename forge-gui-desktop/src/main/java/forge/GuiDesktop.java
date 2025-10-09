@@ -22,7 +22,6 @@ import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
 import javax.swing.SwingUtilities;
 
-import org.apache.commons.lang3.StringUtils;
 import org.jupnp.DefaultUpnpServiceConfiguration;
 import org.jupnp.UpnpServiceConfiguration;
 
@@ -84,9 +83,20 @@ public class GuiDesktop implements IGuiBase {
 
     @Override
     public String getAssetsDir() {
-        return StringUtils.containsIgnoreCase(BuildInfo.getVersionString(), "git") ?
-                // FIXME: replace this hardcoded value!!
-                "../forge-gui/" : "";
+        // For development builds (git or SNAPSHOT), look for resources in the forge-gui module
+        // When running from forge-gui-desktop/target, we need to go up two levels
+        String version = BuildInfo.getVersionString().toLowerCase();
+        if (version.contains("git") || version.contains("snapshot")) {
+            // Check if we're running from forge-gui-desktop/target directory
+            File targetResDir = new File("../../forge-gui/res");
+            if (targetResDir.exists() && targetResDir.isDirectory()) {
+                return "../../forge-gui/";
+            }
+            // Fallback for other development scenarios
+            return "../forge-gui/";
+        }
+        // For release builds, resources are in the current directory
+        return "";
     }
 
     @Override
