@@ -75,7 +75,7 @@
                 <executions>
                     <execution>
                         <id>l4j-gui</id>
-                        <phase>package</phase>
+                        <phase>none</phase>
                         <goals>
                             <goal>launch4j</goal>
                         </goals>
@@ -253,7 +253,7 @@ try {
                 <executions>
                     <execution>
                         <id>GenerateGitChangelog</id>
-                        <phase>package</phase>
+                        <phase>none</phase>
                         <goals>
                             <goal>git-changelog</goal>
                         </goals>
