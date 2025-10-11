@@ -75,7 +75,7 @@
                 <executions>
                     <execution>
                         <id>l4j-gui</id>
-                        <phase>none</phase>
+                        <phase>package</phase>
                         <goals>
                             <goal>launch4j</goal>
                         </goals>
@@ -253,7 +253,7 @@ try {
                 <executions>
                     <execution>
                         <id>GenerateGitChangelog</id>
-                        <phase>none</phase>
+                        <phase>package</phase>
                         <goals>
                             <goal>git-changelog</goal>
                         </goals>
@@ -325,6 +325,11 @@ try {
         <dependency>
             <groupId>forge</groupId>
             <artifactId>forge-gui</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>forge</groupId>
+            <artifactId>forge-headless</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
