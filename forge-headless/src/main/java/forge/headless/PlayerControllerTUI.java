@@ -431,10 +431,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     /**
      * Get integer input from the user within a specified range.
+     * Also handles special commands: "?" for help, "v" for viewing cards.
      */
     private int getIntInput(int min, int max) {
         while (true) {
-            System.out.print("Enter choice (" + min + "-" + max + "): ");
+            System.out.print("Enter choice (" + min + "-" + max + ", or ? for help): ");
 
             try {
                 String line = reader.readLine();
@@ -449,6 +450,17 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                     return min;
                 }
 
+                // Handle special commands
+                if (line.equals("?")) {
+                    showHelp();
+                    continue;
+                }
+
+                if (line.equalsIgnoreCase("v")) {
+                    viewCard();
+                    continue;
+                }
+
                 int choice = Integer.parseInt(line);
                 if (choice >= min && choice <= max) {
                     return choice;
@@ -460,8 +472,143 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 System.out.println("Using default choice: " + min);
                 return min;
             } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Please enter a number.");
+                System.out.println("Invalid input. Please enter a number, '?' for help, or 'v' to view a card.");
             }
         }
+    }
+
+    /**
+     * Display help information for the TUI interface.
+     */
+    private void showHelp() {
+        System.out.println();
+        System.out.println("=== HELP ===");
+        System.out.println("Commands:");
+        System.out.println("  0-9       - Select an action by number");
+        System.out.println("  ?         - Show this help");
+        System.out.println("  v         - View a card (see detailed card text)");
+        System.out.println();
+        System.out.println("During your turn, you can:");
+        System.out.println("  - Play lands (if you haven't used your land drop)");
+        System.out.println("  - Cast spells from your hand");
+        System.out.println("  - Pass priority (0) to move to the next phase");
+        System.out.println();
+        System.out.println("You will be prompted repeatedly until you pass priority.");
+        System.out.println("============");
+        System.out.println();
+    }
+
+    /**
+     * Allow the user to view detailed information about a card.
+     * Shows cards from hand and both players' battlefields.
+     */
+    private void viewCard() {
+        Game game = getGame();
+        List<Card> allCards = new ArrayList<>();
+
+        // Collect cards from player's hand
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            allCards.add(c);
+        }
+
+        // Collect cards from all battlefields
+        for (Player p : game.getPlayers()) {
+            for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+                allCards.add(c);
+            }
+        }
+
+        if (allCards.isEmpty()) {
+            System.out.println("No cards to view.");
+            return;
+        }
+
+        // Sort alphabetically by name
+        allCards.sort((c1, c2) -> c1.getName().compareTo(c2.getName()));
+
+        System.out.println();
+        System.out.println("=== VIEW CARD ===");
+        System.out.println("Select a card to view:");
+
+        for (int i = 0; i < allCards.size(); i++) {
+            Card c = allCards.get(i);
+            String location;
+            if (c.getZone().is(ZoneType.Hand)) {
+                location = "[Hand]";
+            } else {
+                location = "[Battlefield - " + c.getController().getName() + "]";
+            }
+            System.out.println("  " + i + ". " + c.getName() + " " + location);
+        }
+
+        System.out.print("Enter card number (or press Enter to cancel): ");
+        try {
+            String line = reader.readLine();
+            if (line == null || line.trim().isEmpty()) {
+                System.out.println("Cancelled.");
+                return;
+            }
+
+            int cardIndex = Integer.parseInt(line.trim());
+            if (cardIndex < 0 || cardIndex >= allCards.size()) {
+                System.out.println("Invalid card number.");
+                return;
+            }
+
+            Card selectedCard = allCards.get(cardIndex);
+            displayCardDetails(selectedCard);
+
+        } catch (IOException e) {
+            System.err.println("Error reading input: " + e.getMessage());
+        } catch (NumberFormatException e) {
+            System.out.println("Invalid input.");
+        }
+    }
+
+    /**
+     * Display detailed information about a card.
+     */
+    private void displayCardDetails(Card card) {
+        System.out.println();
+        System.out.println("=".repeat(60));
+        System.out.println(card.getName() + " " + card.getManaCost());
+        System.out.println("-".repeat(60));
+
+        // Show card type line
+        StringBuilder typeLine = new StringBuilder();
+        if (!card.getType().isEmpty()) {
+            typeLine.append(card.getType().toString());
+        }
+
+        System.out.println("Type: " + typeLine.toString());
+
+        // Show creature stats if applicable
+        if (card.isCreature()) {
+            System.out.println("Power/Toughness: " + card.getNetPower() + "/" + card.getNetToughness());
+        }
+
+        // Show oracle text
+        String oracleText = card.getOracleText();
+        if (oracleText != null && !oracleText.isEmpty()) {
+            System.out.println();
+            System.out.println("Text:");
+            System.out.println(oracleText);
+        }
+
+        // Show current state if on battlefield
+        if (card.getZone().is(ZoneType.Battlefield)) {
+            System.out.println();
+            System.out.println("Current State:");
+            System.out.println("  Controller: " + card.getController().getName());
+            if (card.isTapped()) {
+                System.out.println("  [TAPPED]");
+            }
+            if (card.isSick()) {
+                System.out.println("  [Summoning Sickness]");
+            }
+        }
+
+        System.out.println("=".repeat(60));
+        System.out.println();
     }
 }
