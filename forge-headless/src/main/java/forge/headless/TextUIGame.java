@@ -41,6 +41,7 @@ public class TextUIGame {
         // Parse optional flags
         GameType type = GameType.Constructed;
         boolean player2IsTUI = false;
+        boolean askMana = false;  // Default: don't prompt for mana abilities
 
         // Look for flags after the deck names
         for (int i = 3; i < args.length; i++) {
@@ -49,6 +50,13 @@ public class TextUIGame {
                 i++; // Skip the format argument
             } else if ("-p2".equals(args[i]) || "--player2-tui".equals(args[i])) {
                 player2IsTUI = true;
+            } else if ("--askmana".equals(args[i])) {
+                if (i + 1 < args.length) {
+                    askMana = "true".equalsIgnoreCase(args[i + 1]);
+                    i++; // Skip the boolean argument
+                } else {
+                    askMana = true; // If no argument, default to true
+                }
             }
         }
 
@@ -123,13 +131,13 @@ public class TextUIGame {
 
         // Install TUI controller for player 1
         if (player1GamePlayer != null) {
-            PlayerControllerTUI tuiController1 = new PlayerControllerTUI(game, player1GamePlayer, player1Lobby);
+            PlayerControllerTUI tuiController1 = new PlayerControllerTUI(game, player1GamePlayer, player1Lobby, askMana);
             installTUIController(player1GamePlayer, tuiController1);
         }
 
         // Install TUI controller for player 2 if requested
         if (player2IsTUI && player2GamePlayer != null) {
-            PlayerControllerTUI tuiController2 = new PlayerControllerTUI(game, player2GamePlayer, player2Lobby);
+            PlayerControllerTUI tuiController2 = new PlayerControllerTUI(game, player2GamePlayer, player2Lobby, askMana);
             installTUIController(player2GamePlayer, tuiController2);
         }
 
@@ -191,6 +199,7 @@ public class TextUIGame {
         System.out.println("Options:");
         System.out.println("  -f <format>           - Game format (default: Constructed)");
         System.out.println("  -p2, --player2-tui    - Enable TUI control for player 2 (default: AI)");
+        System.out.println("  --askmana [true/false] - Prompt for mana abilities (default: false)");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  forge-headless tui a.dck b.dck");

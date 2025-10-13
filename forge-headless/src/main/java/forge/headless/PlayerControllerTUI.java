@@ -3,6 +3,7 @@ package forge.headless;
 import com.google.common.collect.Multimap;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilMana;
+import forge.card.MagicColor;
 import forge.game.GameEntity;
 import forge.ai.PlayerControllerAi;
 import forge.deck.DeckSection;
@@ -38,20 +39,33 @@ import java.util.Map;
 public class PlayerControllerTUI extends PlayerControllerAi {
 
     private final BufferedReader reader;
+    private final boolean askMana;  // Whether to prompt for mana abilities
 
     // Choice tracking statistics
     private int totalChoicesMade = 0;
     private int totalChoiceOptions = 0;
 
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp) {
-        this(game, p, lp, new BufferedReader(new InputStreamReader(System.in)));
+        this(game, p, lp, false);
+    }
+
+    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana) {
+        this(game, p, lp, askMana, new BufferedReader(new InputStreamReader(System.in)));
     }
 
     /**
      * Constructor with injectable reader for testing.
      */
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, BufferedReader reader) {
+        this(game, p, lp, false, reader);
+    }
+
+    /**
+     * Full constructor with all options.
+     */
+    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana, BufferedReader reader) {
         super(game, p, lp);
+        this.askMana = askMana;
         this.reader = reader;
     }
 
@@ -412,6 +426,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     /**
      * Get activated abilities from permanents on the battlefield.
+     * Filters out mana abilities unless askMana is true.
      */
     private List<SpellAbility> getActivatedAbilities() {
         List<SpellAbility> abilities = new ArrayList<>();
@@ -423,6 +438,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 // We want activated abilities (not spells, not triggered)
                 // Activated abilities are not spells and can be played from the battlefield
                 if (!sa.isSpell() && sa.canPlay() && !sa.isTrigger()) {
+                    // Skip mana abilities unless askMana is enabled
+                    if (!askMana && sa.isManaAbility()) {
+                        continue;
+                    }
+
                     // Check if player can pay the activation cost
                     sa.setActivatingPlayer(player);
                     // Check if player can actually afford the cost right now
@@ -523,6 +543,31 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println(marker + "  Library: " + p.getZone(ZoneType.Library).size() + " cards");
         System.out.println(marker + "  Graveyard: " + p.getZone(ZoneType.Graveyard).size() + " cards");
         System.out.println(marker + "  Lands played this turn: " + p.getLandsPlayedThisTurn());
+
+        // Show mana pool if non-empty (only for this player)
+        if (isThisPlayer) {
+            int white = p.getManaPool().getAmountOfColor(MagicColor.WHITE);
+            int blue = p.getManaPool().getAmountOfColor(MagicColor.BLUE);
+            int black = p.getManaPool().getAmountOfColor(MagicColor.BLACK);
+            int red = p.getManaPool().getAmountOfColor(MagicColor.RED);
+            int green = p.getManaPool().getAmountOfColor(MagicColor.GREEN);
+            int colorless = p.getManaPool().getAmountOfColor(MagicColor.COLORLESS);
+            int total = white + blue + black + red + green + colorless;
+
+            if (total > 0) {
+                StringBuilder manaPoolStr = new StringBuilder();
+                manaPoolStr.append(marker).append("  Mana pool: ");
+                List<String> manaComponents = new ArrayList<>();
+                if (white > 0) manaComponents.add(white + " White");
+                if (blue > 0) manaComponents.add(blue + " Blue");
+                if (black > 0) manaComponents.add(black + " Black");
+                if (red > 0) manaComponents.add(red + " Red");
+                if (green > 0) manaComponents.add(green + " Green");
+                if (colorless > 0) manaComponents.add(colorless + " Colorless");
+                manaPoolStr.append(String.join(", ", manaComponents));
+                System.out.println(manaPoolStr.toString());
+            }
+        }
 
         // Show battlefield
         List<Card> lands = new ArrayList<>();
