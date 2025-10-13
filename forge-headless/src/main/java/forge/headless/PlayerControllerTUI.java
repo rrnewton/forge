@@ -146,18 +146,22 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Instants can be cast at any time we have priority
         instantAbilities = getCastableInstants();
 
+        // Get activated abilities from permanents on the battlefield
+        List<SpellAbility> activatedAbilities = getActivatedAbilities();
+
         // Count total available actions
         int totalActions = landAbilities.size() + creatureAbilities.size() + artifactAbilities.size() +
-                           instantAbilities.size() + sorceryAbilities.size();
+                           instantAbilities.size() + sorceryAbilities.size() + activatedAbilities.size();
 
         // Smart auto-passing on opponent's turn
         if (!isMyTurn) {
             // Only prompt on opponent's turn if:
             // 1. Stack has items (we might want to respond), OR
-            // 2. It's end step AND we have instants (classic "at end of your turn" timing)
-            // 3. We have activated abilities (TODO: detect these)
+            // 2. It's end step AND we have instants (classic "at end of your turn" timing), OR
+            // 3. We have activated abilities
 
-            boolean shouldPrompt = stackHasItems || (isEndStep && !instantAbilities.isEmpty());
+            boolean hasInstantSpeedActions = !instantAbilities.isEmpty() || !activatedAbilities.isEmpty();
+            boolean shouldPrompt = stackHasItems || (isEndStep && hasInstantSpeedActions);
 
             if (!shouldPrompt) {
                 // Silently pass - don't spam output during opponent's turn
@@ -241,6 +245,17 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             optionNum++;
         }
 
+        // Show activated ability options
+        for (SpellAbility sa : activatedAbilities) {
+            Card source = sa.getHostCard();
+            String description = sa.getDescription();
+            if (description == null || description.isEmpty()) {
+                description = "Activate ability";
+            }
+            System.out.println("  " + optionNum + ". " + source.getName() + ": " + description);
+            optionNum++;
+        }
+
         // Get user input
         int choice = getIntInput(0, totalActions);
 
@@ -271,6 +286,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             } else if ((idx -= sorceryAbilities.size()) < instantAbilities.size()) {
                 chosen = instantAbilities.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
+            } else if ((idx -= instantAbilities.size()) < activatedAbilities.size()) {
+                chosen = activatedAbilities.get(idx);
+                System.out.println(">> Activating " + chosen.getHostCard().getName() + "...\n");
             }
 
             return Collections.singletonList(chosen);
@@ -378,6 +396,31 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         return spells;
+    }
+
+    /**
+     * Get activated abilities from permanents on the battlefield.
+     */
+    private List<SpellAbility> getActivatedAbilities() {
+        List<SpellAbility> abilities = new ArrayList<>();
+
+        // Check all permanents we control
+        for (Card c : player.getCardsIn(ZoneType.Battlefield)) {
+            // Get all abilities for this permanent
+            for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                // We want activated abilities (not spells, not triggered)
+                // Activated abilities are not spells and can be played from the battlefield
+                if (!sa.isSpell() && sa.canPlay() && !sa.isTrigger()) {
+                    // Check if player can pay the activation cost
+                    sa.setActivatingPlayer(player);
+                    // Use simpler check - just see if it's playable
+                    // TODO: Could add more sophisticated cost checking here
+                    abilities.add(sa);
+                }
+            }
+        }
+
+        return abilities;
     }
 
     /**
@@ -1009,5 +1052,47 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
         // For planeswalkers and other entities
         return defender.toString();
+    }
+
+    @Override
+    public boolean confirmTrigger(forge.game.trigger.WrappedAbility wrapper) {
+        // Mandatory triggers always fire
+        if (wrapper.isMandatory()) {
+            return true;
+        }
+
+        // Optional triggers - ask the user
+        SpellAbility sa = wrapper.getWrappedAbility();
+        Card source = sa.getHostCard();
+
+        System.out.println();
+        System.out.println("=".repeat(60));
+        System.out.println("=== OPTIONAL TRIGGER ===");
+        System.out.println("=".repeat(60));
+        System.out.println("Source: " + source.getName());
+        System.out.println("Ability: " + sa.getDescription());
+        System.out.println();
+        System.out.print("Do you want to use this trigger? (y/n): ");
+
+        try {
+            String line = reader.readLine();
+            if (line == null || line.trim().isEmpty()) {
+                return false; // Default to no
+            }
+
+            String response = line.trim().toLowerCase();
+            boolean result = response.startsWith("y");
+
+            if (result) {
+                System.out.println(">> Trigger accepted\n");
+            } else {
+                System.out.println(">> Trigger declined\n");
+            }
+
+            return result;
+        } catch (IOException e) {
+            System.err.println("Error reading input: " + e.getMessage());
+            return false; // Default to no on error
+        }
     }
 }
