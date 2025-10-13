@@ -81,38 +81,86 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Display current game state
         displayGameState();
 
-        // Get playable lands from hand
+        PhaseHandler ph = getGame().getPhaseHandler();
+        boolean isPostCombatMain = ph.is(forge.game.phase.PhaseType.MAIN2);
+
+        // Get playable actions from hand
         List<SpellAbility> landAbilities = getPlayableLands();
+        List<SpellAbility> creatureAbilities = new ArrayList<>();
+        List<SpellAbility> artifactAbilities = new ArrayList<>();
+
+        // In post-combat main phase, also check for castable creatures and artifacts
+        if (isPostCombatMain) {
+            creatureAbilities = getCastableCreaturesAndArtifacts(true);
+            artifactAbilities = getCastableCreaturesAndArtifacts(false);
+        }
+
+        // Count total available actions
+        int totalActions = landAbilities.size() + creatureAbilities.size() + artifactAbilities.size();
 
         // If there are no options besides passing, auto-pass without prompting
-        if (landAbilities.isEmpty()) {
+        if (totalActions == 0) {
             System.out.println(">> Auto-passing priority (no actions available)...\n");
             return null;
         }
 
         // Show options to user
         System.out.println("\n=== YOUR TURN ===");
+        if (isPostCombatMain) {
+            System.out.println("[Post-Combat Main Phase]");
+        }
         System.out.println("What would you like to do?");
         System.out.println("  0. Pass priority (do nothing)");
 
-        for (int i = 0; i < landAbilities.size(); i++) {
-            Card land = landAbilities.get(i).getHostCard();
-            System.out.println("  " + (i + 1) + ". Play land: " + land.getName());
+        int optionNum = 1;
+
+        // Show land options
+        for (SpellAbility sa : landAbilities) {
+            Card land = sa.getHostCard();
+            System.out.println("  " + optionNum + ". Play land: " + land.getName());
+            optionNum++;
+        }
+
+        // Show creature options
+        for (SpellAbility sa : creatureAbilities) {
+            Card creature = sa.getHostCard();
+            System.out.println("  " + optionNum + ". Cast creature: " + creature.getName() +
+                " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ") - " +
+                creature.getManaCost());
+            optionNum++;
+        }
+
+        // Show artifact options
+        for (SpellAbility sa : artifactAbilities) {
+            Card artifact = sa.getHostCard();
+            System.out.println("  " + optionNum + ". Cast artifact: " + artifact.getName() +
+                " - " + artifact.getManaCost());
+            optionNum++;
         }
 
         // Get user input
-        int choice = getIntInput(0, landAbilities.size());
+        int choice = getIntInput(0, totalActions);
 
         // Track choice statistics
         totalChoicesMade++;
-        totalChoiceOptions += (landAbilities.size() + 1); // +1 for pass option
+        totalChoiceOptions += (totalActions + 1); // +1 for pass option
 
         if (choice == 0) {
             System.out.println(">> Passing priority...\n");
             return null; // Pass priority
         } else {
-            SpellAbility chosen = landAbilities.get(choice - 1);
-            System.out.println(">> Playing " + chosen.getHostCard().getName() + "...\n");
+            // Find the chosen ability
+            SpellAbility chosen = null;
+            if (choice <= landAbilities.size()) {
+                chosen = landAbilities.get(choice - 1);
+                System.out.println(">> Playing " + chosen.getHostCard().getName() + "...\n");
+            } else if (choice <= landAbilities.size() + creatureAbilities.size()) {
+                chosen = creatureAbilities.get(choice - landAbilities.size() - 1);
+                System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
+            } else {
+                chosen = artifactAbilities.get(choice - landAbilities.size() - creatureAbilities.size() - 1);
+                System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
+            }
             return Collections.singletonList(chosen);
         }
     }
@@ -135,6 +183,33 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         return lands;
+    }
+
+    /**
+     * Get castable creature or artifact spells from the player's hand.
+     * @param creatures if true, get creatures; if false, get artifacts
+     */
+    private List<SpellAbility> getCastableCreaturesAndArtifacts(boolean creatures) {
+        List<SpellAbility> spells = new ArrayList<>();
+
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            // Check if we're looking for the right type
+            if (creatures && !c.isCreature()) continue;
+            if (!creatures && !c.isArtifact()) continue;
+            // Skip if it's also a land (like artifact lands)
+            if (c.isLand()) continue;
+
+            // Get the main spell ability (casting the card)
+            for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                // We want spell abilities that can be cast from hand
+                if (sa.isSpell() && sa.canPlay()) {
+                    spells.add(sa);
+                    break; // Only need the first castable ability
+                }
+            }
+        }
+
+        return spells;
     }
 
     /**
