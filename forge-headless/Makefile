@@ -14,7 +14,7 @@ all: build test
 # Build the project with Maven
 build:
 	@echo "Building forge-headless..."
-	cd .. && mvn clean package -DskipTests -Dcheckstyle.skip=true -pl forge-headless -am -q
+	cd .. && mvn package -DskipTests -Dcheckstyle.skip=true -pl forge-headless -am -q
 
 # Run fast Java unit tests
 test:
