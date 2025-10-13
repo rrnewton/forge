@@ -592,7 +592,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         if (oracleText != null && !oracleText.isEmpty()) {
             System.out.println();
             System.out.println("Text:");
-            System.out.println(oracleText);
+            // Replace literal \n with actual newlines
+            String formattedText = oracleText.replace("\\n", "\n");
+            System.out.println(formattedText);
         }
 
         // Show current state if on battlefield
