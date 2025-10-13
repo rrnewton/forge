@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(time mvn -pl forge-core,forge-game,forge-ai -am package -DskipTests -Dcheckstyle.skip=true)",
+      "Bash(time mvn:*)",
+      "Bash(java:*)",
+      "Bash(mvn:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
