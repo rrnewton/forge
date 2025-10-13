@@ -78,6 +78,9 @@ public class TUIGameTest {
      * - Game completes without errors
      * - Game takes at least 3 turns
      * - No Java exceptions occur
+     * - No mana payment failures
+     * - No targeting failures
+     * - No activator warnings
      */
     @Test
     public void testRandomAgentCompletes() {
@@ -87,18 +90,33 @@ public class TUIGameTest {
         Deck deck = loadTestDeck("monored.dck");
         assertNotNull("Failed to load test deck", deck);
 
-        // Create and run game with random controller
-        GameOutcome outcome = runGameWithTestController(deck, deck, false, false);
+        // Capture System.out/err to detect error patterns
+        SystemOutputCapture outputCapture = new SystemOutputCapture();
+        outputCapture.startCapture();
 
-        // Verify game completed
-        assertNotNull("Game outcome should not be null", outcome);
-        assertTrue("Game should have a winner or be a draw",
-                   outcome.getWinningPlayer() != null || outcome.isDraw());
+        try {
+            // Create and run game with random controller
+            GameOutcome outcome = runGameWithTestController(deck, deck, false, false);
 
-        if (outcome.isDraw()) {
-            System.out.println("  ✓ Game ended in draw");
-        } else {
-            System.out.println("  ✓ Game completed, winner: " + outcome.getWinningLobbyPlayer().getName());
+            // Verify game completed
+            assertNotNull("Game outcome should not be null", outcome);
+            assertTrue("Game should have a winner or be a draw",
+                       outcome.getWinningPlayer() != null || outcome.isDraw());
+
+            if (outcome.isDraw()) {
+                System.out.println("  ✓ Game ended in draw");
+            } else {
+                System.out.println("  ✓ Game completed, winner: " + outcome.getWinningLobbyPlayer().getName());
+            }
+        } finally {
+            outputCapture.stopCapture();
+        }
+
+        // Check for error patterns in captured output
+        if (outputCapture.hasErrorPatterns()) {
+            List<String> errors = outputCapture.getErrorPatterns();
+            fail("Random agent generated errors:\n" + String.join("\n", errors) +
+                 "\n\nCaptured output:\n" + outputCapture.getAllOutput());
         }
     }
 
