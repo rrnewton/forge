@@ -2,6 +2,7 @@ package forge.headless;
 
 import com.google.common.collect.Multimap;
 import forge.LobbyPlayer;
+import forge.ai.ComputerUtilMana;
 import forge.ai.PlayerControllerAi;
 import forge.deck.DeckSection;
 import forge.game.Game;
@@ -106,9 +107,6 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Print any new game log entries
         TUIGuiBase.printNewLogEntries();
 
-        // Display current game state
-        displayGameState();
-
         PhaseHandler ph = getGame().getPhaseHandler();
         boolean isMainPhase = ph.is(forge.game.phase.PhaseType.MAIN1) || ph.is(forge.game.phase.PhaseType.MAIN2);
         boolean isPostCombatMain = ph.is(forge.game.phase.PhaseType.MAIN2);
@@ -139,6 +137,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             System.out.println(">> Auto-passing priority (no actions available)...\n");
             return null;
         }
+
+        // Only display game state when we're prompting the user for input
+        displayGameState();
 
         // Show options to user
         System.out.println("\n=== YOUR TURN ===");
@@ -266,7 +267,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    spells.add(sa);
+                    // Check if player has enough mana sources to cast this spell
+                    sa.setActivatingPlayer(player);
+                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                        spells.add(sa);
+                    }
                     break; // Only need the first castable ability
                 }
             }
@@ -288,7 +293,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    spells.add(sa);
+                    // Check if player has enough mana sources to cast this spell
+                    sa.setActivatingPlayer(player);
+                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                        spells.add(sa);
+                    }
                     break; // Only need the first castable ability
                 }
             }
@@ -310,7 +319,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    spells.add(sa);
+                    // Check if player has enough mana sources to cast this spell
+                    sa.setActivatingPlayer(player);
+                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                        spells.add(sa);
+                    }
                     break; // Only need the first castable ability
                 }
             }
@@ -431,7 +444,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     /**
      * Get integer input from the user within a specified range.
-     * Also handles special commands: "?" for help, "v" for viewing cards.
+     * Also handles special commands: "?" for help, "v" for viewing cards, "g" for graveyards.
      */
     private int getIntInput(int min, int max) {
         while (true) {
@@ -461,6 +474,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                     continue;
                 }
 
+                if (line.equalsIgnoreCase("g")) {
+                    viewGraveyards();
+                    continue;
+                }
+
                 int choice = Integer.parseInt(line);
                 if (choice >= min && choice <= max) {
                     return choice;
@@ -472,7 +490,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 System.out.println("Using default choice: " + min);
                 return min;
             } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Please enter a number, '?' for help, or 'v' to view a card.");
+                System.out.println("Invalid input. Please enter a number, '?' for help, 'v' to view a card, or 'g' to view graveyards.");
             }
         }
     }
@@ -487,6 +505,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("  0-9       - Select an action by number");
         System.out.println("  ?         - Show this help");
         System.out.println("  v         - View a card (see detailed card text)");
+        System.out.println("  g         - View all graveyards");
         System.out.println();
         System.out.println("During your turn, you can:");
         System.out.println("  - Play lands (if you haven't used your land drop)");
@@ -523,15 +542,25 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             return;
         }
 
+        // Remove duplicates by card name (keep first occurrence)
+        List<Card> uniqueCards = new ArrayList<>();
+        java.util.Set<String> seenNames = new java.util.HashSet<>();
+        for (Card c : allCards) {
+            if (!seenNames.contains(c.getName())) {
+                uniqueCards.add(c);
+                seenNames.add(c.getName());
+            }
+        }
+
         // Sort alphabetically by name
-        allCards.sort((c1, c2) -> c1.getName().compareTo(c2.getName()));
+        uniqueCards.sort((c1, c2) -> c1.getName().compareTo(c2.getName()));
 
         System.out.println();
         System.out.println("=== VIEW CARD ===");
         System.out.println("Select a card to view:");
 
-        for (int i = 0; i < allCards.size(); i++) {
-            Card c = allCards.get(i);
+        for (int i = 0; i < uniqueCards.size(); i++) {
+            Card c = uniqueCards.get(i);
             String location;
             if (c.getZone().is(ZoneType.Hand)) {
                 location = "[Hand]";
@@ -550,12 +579,12 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             }
 
             int cardIndex = Integer.parseInt(line.trim());
-            if (cardIndex < 0 || cardIndex >= allCards.size()) {
+            if (cardIndex < 0 || cardIndex >= uniqueCards.size()) {
                 System.out.println("Invalid card number.");
                 return;
             }
 
-            Card selectedCard = allCards.get(cardIndex);
+            Card selectedCard = uniqueCards.get(cardIndex);
             displayCardDetails(selectedCard);
 
         } catch (IOException e) {
@@ -612,5 +641,78 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
         System.out.println("=".repeat(60));
         System.out.println();
+    }
+
+    /**
+     * Display the contents of all players' graveyards.
+     */
+    private void viewGraveyards() {
+        Game game = getGame();
+        System.out.println();
+        System.out.println("=== GRAVEYARDS ===");
+
+        for (Player p : game.getPlayers()) {
+            List<Card> graveyard = new ArrayList<>();
+            for (Card c : p.getCardsIn(ZoneType.Graveyard)) {
+                graveyard.add(c);
+            }
+
+            System.out.println();
+            System.out.println(p.getName() + "'s Graveyard (" + graveyard.size() + " cards):");
+
+            if (graveyard.isEmpty()) {
+                System.out.println("  (empty)");
+            } else {
+                // Sort by card type for better readability
+                graveyard.sort((c1, c2) -> {
+                    // Sort order: Creature, Instant, Sorcery, Artifact, Enchantment, Land, Other
+                    int priority1 = getCardTypePriority(c1);
+                    int priority2 = getCardTypePriority(c2);
+                    if (priority1 != priority2) {
+                        return Integer.compare(priority1, priority2);
+                    }
+                    return c1.getName().compareTo(c2.getName());
+                });
+
+                for (Card c : graveyard) {
+                    String cardInfo = "  - " + c.getName();
+                    if (c.isCreature()) {
+                        cardInfo += " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+                    }
+                    cardInfo += " - " + getCardTypeString(c);
+                    System.out.println(cardInfo);
+                }
+            }
+        }
+
+        System.out.println();
+        System.out.println("==================");
+        System.out.println();
+    }
+
+    /**
+     * Get a priority value for sorting cards by type.
+     */
+    private int getCardTypePriority(Card c) {
+        if (c.isCreature()) return 1;
+        if (c.isInstant()) return 2;
+        if (c.isSorcery()) return 3;
+        if (c.isArtifact()) return 4;
+        if (c.isEnchantment()) return 5;
+        if (c.isLand()) return 6;
+        return 7;
+    }
+
+    /**
+     * Get a simple type string for a card.
+     */
+    private String getCardTypeString(Card c) {
+        if (c.isCreature()) return "Creature";
+        if (c.isInstant()) return "Instant";
+        if (c.isSorcery()) return "Sorcery";
+        if (c.isArtifact()) return "Artifact";
+        if (c.isEnchantment()) return "Enchantment";
+        if (c.isLand()) return "Land";
+        return "Other";
     }
 }
