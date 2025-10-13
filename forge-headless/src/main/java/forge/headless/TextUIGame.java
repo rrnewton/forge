@@ -75,7 +75,8 @@ public class TextUIGame {
         } else {
             player1 = new RegisteredPlayer(humanDeck);
         }
-        LobbyPlayer player1Lobby = GamePlayerUtil.getGuiPlayer();
+        // Create a separate LobbyPlayer instance for player 1
+        LobbyPlayer player1Lobby = GamePlayerUtil.getGuiPlayer("Player 1", 0, 0, false);
         player1.setPlayer(player1Lobby);
         players.add(player1);
 
@@ -88,9 +89,8 @@ public class TextUIGame {
             player2 = new RegisteredPlayer(aiDeck);
         }
         if (player2IsTUI) {
-            // Create second GUI player for TUI
-            // Note: Both players will share the same LobbyPlayer instance but get different controllers
-            player2Lobby = GamePlayerUtil.getGuiPlayer();
+            // Create a separate LobbyPlayer instance for player 2
+            player2Lobby = GamePlayerUtil.getGuiPlayer("Player 2", 1, 1, false);
         } else {
             // Create AI player
             String aiName = TextUtil.concatNoSpace("AI-", aiDeck.getName());

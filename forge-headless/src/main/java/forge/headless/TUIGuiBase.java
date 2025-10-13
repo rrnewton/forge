@@ -43,14 +43,24 @@ public class TUIGuiBase extends HeadlessGuiBase {
 
         List<GameLogEntry> allEntries = currentGame.getGameLog().getLogEntries(null);
 
-        // Get entries from lastLogIndex onwards
-        for (int i = lastLogIndex; i < allEntries.size(); i++) {
-            GameLogEntry entry = allEntries.get(i);
-            // Prefix with +++ for TUI log entries
-            newEntries.add("+++ " + entry.toString());
+        // The game log is stored in reverse chronological order (newest first)
+        // So we need to track from the end and work backwards
+        int totalEntries = allEntries.size();
+
+        // Calculate how many new entries there are
+        int newEntriesCount = totalEntries - lastLogIndex;
+
+        if (newEntriesCount > 0) {
+            // New entries are at indices [0, newEntriesCount)
+            // But we want to print them in chronological order (oldest to newest)
+            for (int i = newEntriesCount - 1; i >= 0; i--) {
+                GameLogEntry entry = allEntries.get(i);
+                // Prefix with +++ for TUI log entries
+                newEntries.add("+++ " + entry.toString());
+            }
         }
 
-        lastLogIndex = allEntries.size();
+        lastLogIndex = totalEntries;
         return newEntries;
     }
 

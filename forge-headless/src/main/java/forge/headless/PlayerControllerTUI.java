@@ -110,6 +110,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         displayGameState();
 
         PhaseHandler ph = getGame().getPhaseHandler();
+        boolean isMainPhase = ph.is(forge.game.phase.PhaseType.MAIN1) || ph.is(forge.game.phase.PhaseType.MAIN2);
         boolean isPostCombatMain = ph.is(forge.game.phase.PhaseType.MAIN2);
 
         // Get playable actions from hand
@@ -119,8 +120,8 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         List<SpellAbility> instantAbilities = new ArrayList<>();
         List<SpellAbility> sorceryAbilities = new ArrayList<>();
 
-        // In post-combat main phase, also check for castable spells
-        if (isPostCombatMain) {
+        // In any main phase, check for castable sorcery-speed spells
+        if (isMainPhase) {
             creatureAbilities = getCastableCreaturesAndArtifacts(true);
             artifactAbilities = getCastableCreaturesAndArtifacts(false);
             sorceryAbilities = getCastableSorceries();
@@ -143,6 +144,8 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("\n=== YOUR TURN ===");
         if (isPostCombatMain) {
             System.out.println("[Post-Combat Main Phase]");
+        } else if (isMainPhase) {
+            System.out.println("[Pre-Combat Main Phase]");
         }
         System.out.println("What would you like to do?");
         System.out.println("  0. Pass priority (do nothing)");
