@@ -18,11 +18,11 @@ from pathlib import Path
 
 class TUITestRunner:
     def __init__(self):
-        self.forge_dir = Path(__file__).parent
+        self.forge_dir = Path(__file__).parent.resolve()
         self.test_decks_dir = self.forge_dir / "test_decks"
         self.scripts_dir = self.forge_dir / "scripts"
-        # headless.sh is at /workspace/headless.sh
-        self.headless_script = Path("/workspace/headless.sh")
+        # headless.sh is 3 directories up: forge-headless -> forge -> outer-repo -> headless.sh
+        self.headless_script = self.forge_dir.parent.parent / "headless.sh"
 
     def run_game(self, agent_script, deck1, deck2, timeout=120):
         """
