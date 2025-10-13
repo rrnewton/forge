@@ -267,9 +267,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    // Check if player has enough mana sources to cast this spell
+                    // Check if player can actually pay the mana cost right now
                     sa.setActivatingPlayer(player);
-                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                    if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                     }
                     break; // Only need the first castable ability
@@ -293,9 +293,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    // Check if player has enough mana sources to cast this spell
+                    // Check if player can actually pay the mana cost right now
                     sa.setActivatingPlayer(player);
-                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                    if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                     }
                     break; // Only need the first castable ability
@@ -319,9 +319,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
                 // We want spell abilities that can be cast from hand
                 if (sa.isSpell() && sa.canPlay()) {
-                    // Check if player has enough mana sources to cast this spell
+                    // Check if player can actually pay the mana cost right now
                     sa.setActivatingPlayer(player);
-                    if (ComputerUtilMana.hasEnoughManaSourcesToCast(sa, player)) {
+                    if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                     }
                     break; // Only need the first castable ability
