@@ -17,7 +17,7 @@ build:
 	cd .. && mvn clean package -DskipTests -Dcheckstyle.skip=true -pl forge-headless -am -q
 
 # Run fast Java unit tests
-test: build
+test:
 	@echo ""
 	@echo "=========================================="
 	@echo "Running Java Unit Tests (fast)"

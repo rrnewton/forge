@@ -3,15 +3,21 @@ package forge.headless;
 import com.google.common.collect.Multimap;
 import forge.LobbyPlayer;
 import forge.ai.ComputerUtilMana;
+import forge.game.GameEntity;
 import forge.ai.PlayerControllerAi;
 import forge.deck.DeckSection;
 import forge.game.Game;
 import forge.game.card.Card;
+import forge.game.card.CardCollection;
+import forge.game.card.CardCollectionView;
+import forge.game.combat.Combat;
+import forge.game.combat.CombatUtil;
 import forge.game.phase.PhaseHandler;
 import forge.game.player.Player;
 import forge.game.spellability.SpellAbility;
 import forge.game.zone.ZoneType;
 import forge.item.PaperCard;
+import forge.util.collect.FCollectionView;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -31,14 +37,22 @@ import java.util.Map;
  */
 public class PlayerControllerTUI extends PlayerControllerAi {
 
-    private final BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
+    private final BufferedReader reader;
 
     // Choice tracking statistics
     private int totalChoicesMade = 0;
     private int totalChoiceOptions = 0;
 
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp) {
+        this(game, p, lp, new BufferedReader(new InputStreamReader(System.in)));
+    }
+
+    /**
+     * Constructor with injectable reader for testing.
+     */
+    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, BufferedReader reader) {
         super(game, p, lp);
+        this.reader = reader;
     }
 
     /**
@@ -714,5 +728,230 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         if (c.isEnchantment()) return "Enchantment";
         if (c.isLand()) return "Land";
         return "Other";
+    }
+
+    @Override
+    public void declareAttackers(Player attacker, Combat combat) {
+        // Print any new game log entries
+        TUIGuiBase.printNewLogEntries();
+
+        // Get all possible attackers
+        CardCollection possibleAttackers = CombatUtil.getPossibleAttackers(attacker);
+
+        if (possibleAttackers.isEmpty()) {
+            System.out.println(">> No creatures available to attack. Skipping combat...\n");
+            return;
+        }
+
+        System.out.println();
+        System.out.println("=".repeat(60));
+        System.out.println("=== DECLARE ATTACKERS ===");
+        System.out.println("=".repeat(60));
+
+        // Show available attackers
+        System.out.println("\nAvailable attackers:");
+        for (int i = 0; i < possibleAttackers.size(); i++) {
+            Card creature = possibleAttackers.get(i);
+            System.out.println("  " + i + ". " + creature.getName() +
+                " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
+                (creature.isTapped() ? " (tapped)" : "") +
+                (creature.isSick() ? " (summoning sickness)" : ""));
+        }
+
+        System.out.println("\nChoose attackers one at a time (or enter 'done' when finished):");
+
+        // Get possible defenders
+        FCollectionView<GameEntity> possibleDefenders = CombatUtil.getAllPossibleDefenders(attacker);
+        List<GameEntity> defendersList = new ArrayList<>();
+        for (GameEntity defender : possibleDefenders) {
+            defendersList.add(defender);
+        }
+
+        // Let user select attackers
+        List<Card> selectedAttackers = new ArrayList<>();
+        while (true) {
+            System.out.print("Enter attacker number (or 'done'): ");
+            try {
+                String line = reader.readLine();
+                if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+                    break;
+                }
+
+                int attackerIndex = Integer.parseInt(line.trim());
+                if (attackerIndex < 0 || attackerIndex >= possibleAttackers.size()) {
+                    System.out.println("Invalid attacker number.");
+                    continue;
+                }
+
+                Card selectedAttacker = possibleAttackers.get(attackerIndex);
+
+                // Check if already selected
+                if (selectedAttackers.contains(selectedAttacker)) {
+                    System.out.println(selectedAttacker.getName() + " is already attacking.");
+                    continue;
+                }
+
+                // If only one defender, attack them automatically
+                GameEntity defender = null;
+                if (defendersList.size() == 1) {
+                    defender = defendersList.get(0);
+                    System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+                } else {
+                    // Multiple defenders - let user choose
+                    System.out.println("\nChoose defender for " + selectedAttacker.getName() + ":");
+                    for (int i = 0; i < defendersList.size(); i++) {
+                        System.out.println("  " + i + ". " + getDefenderName(defendersList.get(i)));
+                    }
+
+                    System.out.print("Enter defender number: ");
+                    String defenderLine = reader.readLine();
+                    if (defenderLine == null || defenderLine.trim().isEmpty()) {
+                        System.out.println("Cancelled attacker selection.");
+                        continue;
+                    }
+
+                    int defenderIndex = Integer.parseInt(defenderLine.trim());
+                    if (defenderIndex < 0 || defenderIndex >= defendersList.size()) {
+                        System.out.println("Invalid defender number.");
+                        continue;
+                    }
+                    defender = defendersList.get(defenderIndex);
+                    System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+                }
+
+                // Add the attacker
+                combat.addAttacker(selectedAttacker, defender);
+                selectedAttackers.add(selectedAttacker);
+
+                System.out.println("  Current attackers: " + selectedAttackers.size());
+
+            } catch (IOException e) {
+                System.err.println("Error reading input: " + e.getMessage());
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Enter a number or 'done'.");
+            }
+        }
+
+        if (selectedAttackers.isEmpty()) {
+            System.out.println(">> No attackers declared.\n");
+        } else {
+            System.out.println(">> Declared " + selectedAttackers.size() + " attacker(s).\n");
+        }
+    }
+
+    @Override
+    public void declareBlockers(Player defender, Combat combat) {
+        // Print any new game log entries
+        TUIGuiBase.printNewLogEntries();
+
+        // Get all attackers
+        CardCollection attackers = combat.getAttackers();
+
+        if (attackers.isEmpty()) {
+            System.out.println(">> No attackers to block.\n");
+            return;
+        }
+
+        // Get possible blockers
+        CardCollection possibleBlockers = defender.getCreaturesInPlay();
+        if (possibleBlockers.isEmpty()) {
+            System.out.println(">> No creatures available to block.\n");
+            return;
+        }
+
+        System.out.println();
+        System.out.println("=".repeat(60));
+        System.out.println("=== DECLARE BLOCKERS ===");
+        System.out.println("=".repeat(60));
+
+        // Show attackers
+        System.out.println("\nAttacking creatures:");
+        for (int i = 0; i < attackers.size(); i++) {
+            Card attacker = attackers.get(i);
+            GameEntity defendingEntity = combat.getDefenderByAttacker(attacker);
+            System.out.println("  " + i + ". " + attacker.getName() +
+                " (" + attacker.getNetPower() + "/" + attacker.getNetToughness() + ")" +
+                " attacking " + getDefenderName(defendingEntity));
+        }
+
+        // Show available blockers
+        System.out.println("\nAvailable blockers:");
+        for (int i = 0; i < possibleBlockers.size(); i++) {
+            Card creature = possibleBlockers.get(i);
+            System.out.println("  " + i + ". " + creature.getName() +
+                " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
+                (creature.isTapped() ? " (tapped)" : ""));
+        }
+
+        System.out.println("\nDeclare blockers (or enter 'done' when finished):");
+        System.out.println("Format: <blocker_num> blocks <attacker_num>");
+        System.out.println("Example: 0 blocks 1");
+
+        // Let user assign blockers
+        while (true) {
+            System.out.print("Enter block assignment (or 'done'): ");
+            try {
+                String line = reader.readLine();
+                if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+                    break;
+                }
+
+                // Parse "X blocks Y" format
+                String[] parts = line.trim().split("\\s+");
+                if (parts.length != 3 || !parts[1].equalsIgnoreCase("blocks")) {
+                    System.out.println("Invalid format. Use: <blocker_num> blocks <attacker_num>");
+                    continue;
+                }
+
+                int blockerIndex = Integer.parseInt(parts[0]);
+                int attackerIndex = Integer.parseInt(parts[2]);
+
+                if (blockerIndex < 0 || blockerIndex >= possibleBlockers.size()) {
+                    System.out.println("Invalid blocker number.");
+                    continue;
+                }
+
+                if (attackerIndex < 0 || attackerIndex >= attackers.size()) {
+                    System.out.println("Invalid attacker number.");
+                    continue;
+                }
+
+                Card blocker = possibleBlockers.get(blockerIndex);
+                Card attacker = attackers.get(attackerIndex);
+
+                // Check if blocker can block this attacker
+                if (!CombatUtil.canBlock(attacker, blocker, combat)) {
+                    System.out.println(blocker.getName() + " cannot block " + attacker.getName() + ".");
+                    continue;
+                }
+
+                // Add the blocker
+                combat.addBlocker(attacker, blocker);
+                System.out.println(">> " + blocker.getName() + " blocks " + attacker.getName());
+
+            } catch (IOException e) {
+                System.err.println("Error reading input: " + e.getMessage());
+                break;
+            } catch (NumberFormatException e) {
+                System.out.println("Invalid input. Use: <blocker_num> blocks <attacker_num>");
+            } catch (ArrayIndexOutOfBoundsException e) {
+                System.out.println("Invalid format. Use: <blocker_num> blocks <attacker_num>");
+            }
+        }
+
+        System.out.println(">> Blockers declared.\n");
+    }
+
+    /**
+     * Get a human-readable name for a defender (player or planeswalker).
+     */
+    private String getDefenderName(GameEntity defender) {
+        if (defender instanceof Player) {
+            Player p = (Player) defender;
+            return p.getName() + " (Life: " + p.getLife() + ")";
+        }
+        // For planeswalkers and other entities
+        return defender.toString();
     }
 }
