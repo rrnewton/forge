@@ -24,6 +24,9 @@ public class TextUIGame {
     public static void run(String[] args) {
         FModel.initialize(null, null);
 
+        // Install TUI GUI base which intercepts game log messages
+        TUIGuiBase.install();
+
         System.out.println("=== Forge Text UI Mode ===");
 
         if (args.length < 3) {
@@ -113,6 +116,9 @@ public class TextUIGame {
                 return;
             }
         }
+
+        // Set the current game for log monitoring
+        TUIGuiBase.setCurrentGame(game);
 
         // Start the game
         System.out.println("Game starting...");
