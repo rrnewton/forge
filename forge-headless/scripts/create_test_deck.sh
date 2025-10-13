@@ -3,7 +3,11 @@
 # Usage: ./create_test_deck.sh [deck_name]
 
 DECK_NAME="${1:-a}"
-DECK_DIR="forge-gui/data/decks/constructed"
+
+# Find the repo root (where .git is located)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+DECK_DIR="$REPO_ROOT/forge-gui/data/decks/constructed"
 
 mkdir -p "$DECK_DIR"
 
