@@ -21,7 +21,8 @@ class TUITestRunner:
         self.forge_dir = Path(__file__).parent
         self.test_decks_dir = self.forge_dir / "test_decks"
         self.scripts_dir = self.forge_dir / "scripts"
-        self.headless_script = self.forge_dir.parent.parent / "headless.sh"
+        # headless.sh is at /workspace/headless.sh
+        self.headless_script = Path("/workspace/headless.sh")
 
     def run_game(self, agent_script, deck1, deck2, timeout=120):
         """
@@ -81,7 +82,13 @@ class TUITestRunner:
             'is_draw': False,
             'game_completed': False,
             'choices_made': 0,
-            'choice_options': 0
+            'choice_options': 0,
+            'max_turn': 0,
+            'final_battlefield_count': 0,
+            'land_in_hand_offered': False,
+            'had_basic_land_in_hand': False,
+            'java_error_occurred': False,
+            'decks_loaded': False
         }
 
         # Look for winner in output
@@ -107,12 +114,58 @@ class TUITestRunner:
             max_choice = int(match.group(2))
             result['choice_options'] += (max_choice - min_choice + 1)
 
+        # Extract max turn number
+        turn_pattern = re.compile(r'Turn (\d+) -')
+        turns = [int(m.group(1)) for m in turn_pattern.finditer(output)]
+        if turns:
+            result['max_turn'] = max(turns)
+
+        # Check for battlefield permanents at end (look for last battlefield state before GAME OVER)
+        # Count "Lands in play:" and "Creatures:" lines
+        battlefield_sections = re.findall(r'Lands in play: (\d+)', output)
+        creature_sections = re.findall(r'Creatures: (\d+)', output)
+        if battlefield_sections or creature_sections:
+            # Get the last few battlefield counts (near game end)
+            recent_lands = [int(x) for x in battlefield_sections[-4:]] if battlefield_sections else []
+            recent_creatures = [int(x) for x in creature_sections[-4:]] if creature_sections else []
+            result['final_battlefield_count'] = max(recent_lands + recent_creatures, default=0)
+
+        # Check if land in hand was offered as a play option during main phase
+        # Look for patterns like "Play land: Mountain" or "Play land: Plains"
+        land_play_pattern = re.compile(r'\d+\. Play land: (Mountain|Plains|Forest|Island|Swamp)')
+        if land_play_pattern.search(output):
+            result['land_in_hand_offered'] = True
+
+        # Check if player had a basic land in hand (look in "Your hand:" sections)
+        hand_pattern = re.compile(r'Your hand:.*?(?=Life:|Creatures:|Library:|$)', re.DOTALL)
+        basic_lands = ['Mountain', 'Plains', 'Forest', 'Island', 'Swamp']
+        for hand_section in hand_pattern.finditer(output):
+            hand_text = hand_section.group(0)
+            if any(land in hand_text for land in basic_lands):
+                result['had_basic_land_in_hand'] = True
+                break
+
+        # Check for Java errors (Exception, Error in output)
+        if 'Exception' in output or 'Error:' in output or 'java.lang' in output:
+            # Filter out expected error messages about card loading
+            if 'ComputerUtilMana' not in output:  # This is the error we're trying to fix
+                result['java_error_occurred'] = True
+
+        # Check if decks loaded successfully
+        if 'Starting game:' in output or 'Game starting...' in output:
+            result['decks_loaded'] = True
+
         return result
 
 
 def test_pass_agent_loses():
     """
     Test that a pass-only agent always loses against the AI.
+
+    Invariants:
+    - Game takes more than 2 turns
+    - Something is on the battlefield by end (at least AI should play land)
+    - If we have a basic land in hand, it should be listed as an option
     """
     print("Running test: pass_agent_loses...")
     runner = TUITestRunner()
@@ -125,12 +178,12 @@ def test_pass_agent_loses():
 
     # Print stderr for debugging
     if stderr:
-        print("\n--- Agent/Game Output ---")
-        print(stderr[:2000])  # First 2000 chars
+        print("\n--- Agent/Game Output (first 2000 chars) ---")
+        print(stderr[:2000])
 
     result = runner.parse_game_result(stderr + stdout)
 
-    # Assertions
+    # Assertions - Basic game completion
     assert result['game_completed'], "Game did not complete"
     assert not result['is_draw'], "Game should not be a draw"
     assert result['winner'] is not None, "There should be a winner"
@@ -140,9 +193,28 @@ def test_pass_agent_loses():
     assert 'AI' in result['winner'] or 'Ai' in result['winner'], \
         f"Expected AI to win, but winner was: {result['winner']}"
 
+    # Invariant 1: Game should take more than 2 turns
+    assert result['max_turn'] > 2, \
+        f"Game should take more than 2 turns, but ended on turn {result['max_turn']}"
+
+    # Invariant 2: Something should be on the battlefield by end
+    # (At minimum, the AI should have played some lands)
+    assert result['final_battlefield_count'] > 0, \
+        "At least one permanent should be on the battlefield by game end"
+
+    # Invariant 3: If we had a basic land in hand, it should have been offered
+    # Note: This only checks if we had a land AND it was offered at some point
+    if result['had_basic_land_in_hand']:
+        assert result['land_in_hand_offered'], \
+            "Had a basic land in hand but it was never offered as a play option"
+
     print(f"✓ Test passed: AI won as expected")
     print(f"  - Winner: {result['winner']}")
+    print(f"  - Max turn: {result['max_turn']}")
+    print(f"  - Final battlefield count: {result['final_battlefield_count']}")
     print(f"  - Choices made by agent: {result['choices_made']}")
+    if result['had_basic_land_in_hand']:
+        print(f"  - Land in hand was offered: {result['land_in_hand_offered']}")
 
     return True
 
@@ -150,6 +222,11 @@ def test_pass_agent_loses():
 def test_random_agent_completes():
     """
     Test that a random agent can complete a game.
+
+    Invariants:
+    - Decks load successfully
+    - Game takes multiple turns (survives a few rounds)
+    - No Java errors occur (even when casting spells)
     """
     print("\nRunning test: random_agent_completes...")
     runner = TUITestRunner()
@@ -161,17 +238,36 @@ def test_random_agent_completes():
         timeout=180  # Longer timeout for random agent
     )
 
-    result = runner.parse_game_result(stderr + stdout)
+    output = stderr + stdout
+    result = runner.parse_game_result(output)
 
-    # Assertions
+    # Invariant 1: Decks should load successfully
+    assert result['decks_loaded'], \
+        "Decks failed to load - check for deck loading errors"
+
+    # Invariant 2: Game should complete
     assert result['game_completed'], "Game did not complete"
     assert result['winner'] is not None or result['is_draw'], \
         "Game should have a winner or be a draw"
 
-    print(f"✓ Test passed: Game completed")
-    print(f"  - Winner: {result['winner']}")
-    print(f"  - Draw: {result['is_draw']}")
+    # Invariant 3: Game should take multiple turns (at least 3)
+    assert result['max_turn'] >= 3, \
+        f"Game should survive at least 3 turns, but ended on turn {result['max_turn']}"
+
+    # Invariant 4: No Java errors should occur
+    # This validates our mana filtering fix - random choices shouldn't cause crashes
+    assert not result['java_error_occurred'], \
+        "Java error occurred during game - check for exceptions in output"
+
+    # Additional check: Look for the specific mana cost error we're trying to prevent
+    if 'ComputerUtilMana: payManaCost() cost was not paid' in output:
+        raise AssertionError("Mana cost error occurred - mana filtering is not working correctly")
+
+    print(f"✓ Test passed: Random agent game completed successfully")
+    print(f"  - Winner: {result['winner'] if result['winner'] else 'Draw'}")
+    print(f"  - Max turn: {result['max_turn']}")
     print(f"  - Choices made by agent: {result['choices_made']}")
+    print(f"  - No Java errors: ✓")
 
     return True
 
