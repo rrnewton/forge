@@ -18,8 +18,12 @@ public final class Main {
 
         if (args.length == 0) {
             System.out.println("Forge Headless Mode");
-            System.out.println("Usage: java -jar forge-headless.jar sim <args>");
+            System.out.println("Usage: java -jar forge-headless.jar <mode> <args>");
+            System.out.println("Known modes:");
+            System.out.println("  sim - Simulation mode (AI vs AI)");
+            System.out.println("  tui - Text UI mode (Interactive gameplay)");
             System.out.println("Run 'java -jar forge-headless.jar sim' for simulation help");
+            System.out.println("Run 'java -jar forge-headless.jar tui' for TUI help");
             System.exit(1);
         }
 
@@ -31,9 +35,13 @@ public final class Main {
                 SimulateMatch.simulate(args);
                 break;
 
+            case "tui":
+                TextUIGame.run(args);
+                break;
+
             default:
                 System.out.println("Unknown mode: " + mode);
-                System.out.println("Known modes: 'sim'");
+                System.out.println("Known modes: 'sim', 'tui'");
                 break;
         }
 
