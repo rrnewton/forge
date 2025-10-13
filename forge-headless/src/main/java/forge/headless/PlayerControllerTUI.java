@@ -180,6 +180,18 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             }
         }
 
+        // Deduplicate abilities - only show unique actions
+        List<SpellAbility> uniqueLands = deduplicateByCardName(landAbilities);
+        List<SpellAbility> uniqueCreatures = deduplicateByCardName(creatureAbilities);
+        List<SpellAbility> uniqueArtifacts = deduplicateByCardName(artifactAbilities);
+        List<SpellAbility> uniqueSorceries = deduplicateByCardName(sorceryAbilities);
+        List<SpellAbility> uniqueInstants = deduplicateByCardName(instantAbilities);
+        List<SpellAbility> uniqueActivated = deduplicateByDescription(activatedAbilities);
+
+        // Recalculate total actions after deduplication
+        int uniqueActions = uniqueLands.size() + uniqueCreatures.size() + uniqueArtifacts.size() +
+                           uniqueInstants.size() + uniqueSorceries.size() + uniqueActivated.size();
+
         // Only display game state when we're prompting the user for input
         displayGameState();
 
@@ -206,14 +218,14 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         int optionNum = 1;
 
         // Show land options
-        for (SpellAbility sa : landAbilities) {
+        for (SpellAbility sa : uniqueLands) {
             Card land = sa.getHostCard();
             System.out.println("  " + optionNum + ". Play land: " + land.getName());
             optionNum++;
         }
 
         // Show creature options
-        for (SpellAbility sa : creatureAbilities) {
+        for (SpellAbility sa : uniqueCreatures) {
             Card creature = sa.getHostCard();
             System.out.println("  " + optionNum + ". Cast creature: " + creature.getName() +
                 " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ") - " +
@@ -222,7 +234,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         // Show artifact options
-        for (SpellAbility sa : artifactAbilities) {
+        for (SpellAbility sa : uniqueArtifacts) {
             Card artifact = sa.getHostCard();
             System.out.println("  " + optionNum + ". Cast artifact: " + artifact.getName() +
                 " - " + artifact.getManaCost());
@@ -230,7 +242,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         // Show sorcery options
-        for (SpellAbility sa : sorceryAbilities) {
+        for (SpellAbility sa : uniqueSorceries) {
             Card sorcery = sa.getHostCard();
             System.out.println("  " + optionNum + ". Cast sorcery: " + sorcery.getName() +
                 " - " + sorcery.getManaCost());
@@ -238,7 +250,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         // Show instant options
-        for (SpellAbility sa : instantAbilities) {
+        for (SpellAbility sa : uniqueInstants) {
             Card instant = sa.getHostCard();
             System.out.println("  " + optionNum + ". Cast instant: " + instant.getName() +
                 " - " + instant.getManaCost());
@@ -246,7 +258,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         // Show activated ability options
-        for (SpellAbility sa : activatedAbilities) {
+        for (SpellAbility sa : uniqueActivated) {
             Card source = sa.getHostCard();
             String description = sa.getDescription();
             if (description == null || description.isEmpty()) {
@@ -257,11 +269,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
 
         // Get user input
-        int choice = getIntInput(0, totalActions);
+        int choice = getIntInput(0, uniqueActions);
 
         // Track choice statistics
         totalChoicesMade++;
-        totalChoiceOptions += (totalActions + 1); // +1 for pass option
+        totalChoiceOptions += (uniqueActions + 1); // +1 for pass option
 
         if (choice == 0) {
             System.out.println(">> Passing priority...\n");
@@ -271,23 +283,23 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             SpellAbility chosen = null;
             int idx = choice - 1;
 
-            if (idx < landAbilities.size()) {
-                chosen = landAbilities.get(idx);
+            if (idx < uniqueLands.size()) {
+                chosen = uniqueLands.get(idx);
                 System.out.println(">> Playing " + chosen.getHostCard().getName() + "...\n");
-            } else if ((idx -= landAbilities.size()) < creatureAbilities.size()) {
-                chosen = creatureAbilities.get(idx);
+            } else if ((idx -= uniqueLands.size()) < uniqueCreatures.size()) {
+                chosen = uniqueCreatures.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
-            } else if ((idx -= creatureAbilities.size()) < artifactAbilities.size()) {
-                chosen = artifactAbilities.get(idx);
+            } else if ((idx -= uniqueCreatures.size()) < uniqueArtifacts.size()) {
+                chosen = uniqueArtifacts.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
-            } else if ((idx -= artifactAbilities.size()) < sorceryAbilities.size()) {
-                chosen = sorceryAbilities.get(idx);
+            } else if ((idx -= uniqueArtifacts.size()) < uniqueSorceries.size()) {
+                chosen = uniqueSorceries.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
-            } else if ((idx -= sorceryAbilities.size()) < instantAbilities.size()) {
-                chosen = instantAbilities.get(idx);
+            } else if ((idx -= uniqueSorceries.size()) < uniqueInstants.size()) {
+                chosen = uniqueInstants.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
-            } else if ((idx -= instantAbilities.size()) < activatedAbilities.size()) {
-                chosen = activatedAbilities.get(idx);
+            } else if ((idx -= uniqueInstants.size()) < uniqueActivated.size()) {
+                chosen = uniqueActivated.get(idx);
                 System.out.println(">> Activating " + chosen.getHostCard().getName() + "...\n");
             }
 
@@ -562,7 +574,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
      */
     private int getIntInput(int min, int max) {
         while (true) {
-            System.out.print("Enter choice (" + min + "-" + max + ", or ? for help): ");
+            System.out.print("Enter choice (" + min + "-" + max + ", or ?): ");
 
             try {
                 String line = reader.readLine();
@@ -1095,5 +1107,39 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             System.err.println("Error reading input: " + e.getMessage());
             return false; // Default to no on error
         }
+    }
+
+    /**
+     * Deduplicate spell abilities by card name, keeping first occurrence.
+     * Used for lands, creatures, artifacts, sorceries, and instants.
+     */
+    private List<SpellAbility> deduplicateByCardName(List<SpellAbility> abilities) {
+        List<SpellAbility> unique = new ArrayList<>();
+        java.util.Set<String> seenNames = new java.util.HashSet<>();
+        for (SpellAbility sa : abilities) {
+            String name = sa.getHostCard().getName();
+            if (!seenNames.contains(name)) {
+                unique.add(sa);
+                seenNames.add(name);
+            }
+        }
+        return unique;
+    }
+
+    /**
+     * Deduplicate activated abilities by card name + description.
+     * Different abilities on the same card will show separately.
+     */
+    private List<SpellAbility> deduplicateByDescription(List<SpellAbility> abilities) {
+        List<SpellAbility> unique = new ArrayList<>();
+        java.util.Set<String> seenKeys = new java.util.HashSet<>();
+        for (SpellAbility sa : abilities) {
+            String key = sa.getHostCard().getName() + ":" + sa.getDescription();
+            if (!seenKeys.contains(key)) {
+                unique.add(sa);
+                seenKeys.add(key);
+            }
+        }
+        return unique;
     }
 }
