@@ -5,7 +5,14 @@
 From the `forge-headless` directory, run:
 
 ```bash
-./test_tui.py
+python3 test_tui.py
+```
+
+Or to run a specific test:
+
+```bash
+python3 test_tui.py pass    # Run pass agent test
+python3 test_tui.py random  # Run random agent test
 ```
 
 This will run automated tests against the TUI using different agents.
@@ -14,15 +21,30 @@ This will run automated tests against the TUI using different agents.
 
 The test framework includes:
 
-1. **pass_agent.py** - Always chooses option 0 (pass priority). Used to verify that passive play results in a loss.
+1. **scripts/pass_agent.py** - Always chooses option 0 (pass priority). Used to verify that passive play results in a loss.
 
-2. **random_agent.py** - Makes random choices. Used to verify the TUI can handle various game paths.
+2. **scripts/random_agent.py** - Makes random choices. Used to verify the TUI can handle various game paths.
 
 3. **test_tui.py** - Main test runner that:
-   - Spawns agents and TUI games
-   - Parses game output
-   - Verifies expected outcomes
+   - Spawns agents and TUI games via subprocess
+   - Parses game output to extract metrics
+   - Verifies expected outcomes with comprehensive assertions
    - Reports test results
+
+## Test Invariants
+
+The tests validate important game invariants:
+
+**Pass Agent Test:**
+- Game takes more than 2 turns (validates progression)
+- Battlefield has permanents by end (AI plays lands/creatures)
+- Basic lands in hand are offered as play options
+
+**Random Agent Test:**
+- Decks load successfully
+- Game survives at least 3 turns
+- No Java exceptions occur (validates mana filtering)
+- No "payManaCost() cost was not paid" errors
 
 ## Adding New Tests
 
