@@ -1,6 +1,7 @@
 package forge.headless;
 
 import forge.LobbyPlayer;
+import forge.ai.ComputerUtilMana;
 import forge.ai.PlayerControllerAi;
 import forge.game.Game;
 import forge.game.card.Card;
@@ -85,6 +86,10 @@ public class TestRandomController extends PlayerControllerAi {
         for (Card c : player.getCardsIn(ZoneType.Hand)) {
             if (c.isLand()) {
                 for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                    // Ensure activator is set before checking
+                    if (sa.getActivatingPlayer() == null) {
+                        sa.setActivatingPlayer(player);
+                    }
                     if (sa.isLandAbility() && sa.canPlay()) {
                         lands.add(sa);
                         break;
@@ -100,7 +105,16 @@ public class TestRandomController extends PlayerControllerAi {
         for (Card c : player.getCardsIn(ZoneType.Hand)) {
             if (c.isCreature() && !c.isLand()) {
                 for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
-                    if (sa.isSpell() && sa.canPlay()) {
+                    // Ensure activator is set before checking
+                    if (sa.getActivatingPlayer() == null) {
+                        sa.setActivatingPlayer(player);
+                    }
+                    // Skip spells that use targeting (not supported by random controller)
+                    if (sa.usesTargeting()) {
+                        continue;
+                    }
+                    // Check if can play AND can actually pay the mana cost
+                    if (sa.isSpell() && sa.canPlay() && ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                         break;
                     }
@@ -115,7 +129,16 @@ public class TestRandomController extends PlayerControllerAi {
         for (Card c : player.getCardsIn(ZoneType.Hand)) {
             if (c.isSorcery()) {
                 for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
-                    if (sa.isSpell() && sa.canPlay()) {
+                    // Ensure activator is set before checking
+                    if (sa.getActivatingPlayer() == null) {
+                        sa.setActivatingPlayer(player);
+                    }
+                    // Skip spells that use targeting (not supported by random controller)
+                    if (sa.usesTargeting()) {
+                        continue;
+                    }
+                    // Check if can play AND can actually pay the mana cost
+                    if (sa.isSpell() && sa.canPlay() && ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                         break;
                     }
@@ -130,7 +153,16 @@ public class TestRandomController extends PlayerControllerAi {
         for (Card c : player.getCardsIn(ZoneType.Hand)) {
             if (c.isInstant()) {
                 for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
-                    if (sa.isSpell() && sa.canPlay()) {
+                    // Ensure activator is set before checking
+                    if (sa.getActivatingPlayer() == null) {
+                        sa.setActivatingPlayer(player);
+                    }
+                    // Skip spells that use targeting (not supported by random controller)
+                    if (sa.usesTargeting()) {
+                        continue;
+                    }
+                    // Check if can play AND can actually pay the mana cost
+                    if (sa.isSpell() && sa.canPlay() && ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
                         spells.add(sa);
                         break;
                     }

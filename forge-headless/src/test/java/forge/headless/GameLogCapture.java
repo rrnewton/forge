@@ -101,11 +101,25 @@ public class GameLogCapture {
 
     /**
      * Check if there are any error messages in the logs.
+     * Also captures System.out/err messages by checking if specific error patterns occurred.
      */
     public boolean hasErrors() {
         for (String log : capturedLogs) {
             if (log.contains("error") || log.contains("Error") ||
                 log.contains("Exception") || log.contains("failed")) {
+                return true;
+            }
+            // Check for specific error patterns that indicate problems
+            if (log.contains("cost was not paid for")) {
+                return true;
+            }
+            if (log.contains("Couldn't add to stack, failed to target")) {
+                return true;
+            }
+            if (log.contains("Did not have activator set")) {
+                return true;
+            }
+            if (log.contains("AI failed to play")) {
                 return true;
             }
         }
