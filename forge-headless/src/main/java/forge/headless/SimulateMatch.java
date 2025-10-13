@@ -349,12 +349,19 @@ public class SimulateMatch {
     private static Deck deckFromCommandLineParameter(String deckname, GameType type) {
         int dotpos = deckname.lastIndexOf('.');
         if (dotpos > 0 && dotpos == deckname.length() - 4) {
-            String baseDir = type.equals(GameType.Commander) ?
-                    ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+            // It's a file - first check if it's an absolute or relative path
+            File f = new File(deckname);
 
-            File f = new File(baseDir + deckname);
+            // If not found as-is, try with the base directory
             if (!f.exists()) {
-                System.out.println("No deck found in " + baseDir);
+                String baseDir = type.equals(GameType.Commander) ?
+                        ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+                f = new File(baseDir + deckname);
+            }
+
+            if (!f.exists()) {
+                System.out.println("No deck found: " + deckname);
+                return null;
             }
 
             return DeckSerializer.fromFile(f);

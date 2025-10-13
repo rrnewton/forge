@@ -60,6 +60,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        // Print any new game log entries
+        TUIGuiBase.printNewLogEntries();
+
         // Display current game state
         displayGameState();
 
