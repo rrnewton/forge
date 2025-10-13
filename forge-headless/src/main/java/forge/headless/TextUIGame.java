@@ -135,6 +135,19 @@ public class TextUIGame {
         } else {
             System.out.println("Winner: " + game.getOutcome().getWinningLobbyPlayer().getName());
         }
+
+        // Print choice statistics if available
+        if (humanGamePlayer != null && humanGamePlayer.getController() instanceof PlayerControllerTUI) {
+            PlayerControllerTUI tuiController = (PlayerControllerTUI) humanGamePlayer.getController();
+            System.out.println();
+            System.out.println("=== Choice Statistics ===");
+            System.out.println("Total choices made: " + tuiController.getTotalChoicesMade());
+            System.out.println("Total options presented: " + tuiController.getTotalChoiceOptions());
+            if (tuiController.getTotalChoicesMade() > 0) {
+                double avgOptions = (double) tuiController.getTotalChoiceOptions() / tuiController.getTotalChoicesMade();
+                System.out.printf("Average options per choice: %.2f%n", avgOptions);
+            }
+        }
     }
 
     private static void showHelp() {

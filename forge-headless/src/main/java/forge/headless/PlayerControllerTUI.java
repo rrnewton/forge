@@ -32,8 +32,23 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     private final BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
+    // Choice tracking statistics
+    private int totalChoicesMade = 0;
+    private int totalChoiceOptions = 0;
+
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp) {
         super(game, p, lp);
+    }
+
+    /**
+     * Get statistics about choices made during the game.
+     */
+    public int getTotalChoicesMade() {
+        return totalChoicesMade;
+    }
+
+    public int getTotalChoiceOptions() {
+        return totalChoiceOptions;
     }
 
     @Override
@@ -87,6 +102,10 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
         // Get user input
         int choice = getIntInput(0, landAbilities.size());
+
+        // Track choice statistics
+        totalChoicesMade++;
+        totalChoiceOptions += (landAbilities.size() + 1); // +1 for pass option
 
         if (choice == 0) {
             System.out.println(">> Passing priority...\n");
