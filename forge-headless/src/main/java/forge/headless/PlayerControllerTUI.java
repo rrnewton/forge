@@ -413,9 +413,10 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 if (!sa.isSpell() && sa.canPlay() && !sa.isTrigger()) {
                     // Check if player can pay the activation cost
                     sa.setActivatingPlayer(player);
-                    // Use simpler check - just see if it's playable
-                    // TODO: Could add more sophisticated cost checking here
-                    abilities.add(sa);
+                    // Check if player can actually afford the cost right now
+                    if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
+                        abilities.add(sa);
+                    }
                 }
             }
         }
