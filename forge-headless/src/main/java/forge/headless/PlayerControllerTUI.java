@@ -74,6 +74,34 @@ public class PlayerControllerTUI extends PlayerControllerAi {
     }
 
     @Override
+    public boolean chooseTargetsFor(SpellAbility sa) {
+        // For now, use AI targeting but print what was chosen
+        // This lets the AI handle complex targeting logic while we show the user what happened
+        boolean result = super.chooseTargetsFor(sa);
+
+        if (result && sa.usesTargeting() && sa.getTargets() != null && !sa.getTargets().isEmpty()) {
+            System.out.println("\n>> Auto-targeted with " + sa.getHostCard().getName() + ":");
+            for (forge.game.GameObject target : sa.getTargets()) {
+                String desc = target.toString();
+                if (target instanceof Player) {
+                    Player p = (Player) target;
+                    desc = p.getName() + " (Life: " + p.getLife() + ")";
+                } else if (target instanceof Card) {
+                    Card c = (Card) target;
+                    desc = c.getName();
+                    if (c.isCreature()) {
+                        desc += " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+                    }
+                }
+                System.out.println("   * " + desc);
+            }
+            System.out.println();
+        }
+
+        return result;
+    }
+
+    @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
         // Print any new game log entries
         TUIGuiBase.printNewLogEntries();
@@ -88,15 +116,22 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         List<SpellAbility> landAbilities = getPlayableLands();
         List<SpellAbility> creatureAbilities = new ArrayList<>();
         List<SpellAbility> artifactAbilities = new ArrayList<>();
+        List<SpellAbility> instantAbilities = new ArrayList<>();
+        List<SpellAbility> sorceryAbilities = new ArrayList<>();
 
-        // In post-combat main phase, also check for castable creatures and artifacts
+        // In post-combat main phase, also check for castable spells
         if (isPostCombatMain) {
             creatureAbilities = getCastableCreaturesAndArtifacts(true);
             artifactAbilities = getCastableCreaturesAndArtifacts(false);
+            sorceryAbilities = getCastableSorceries();
         }
 
+        // Instants can be cast at any time we have priority
+        instantAbilities = getCastableInstants();
+
         // Count total available actions
-        int totalActions = landAbilities.size() + creatureAbilities.size() + artifactAbilities.size();
+        int totalActions = landAbilities.size() + creatureAbilities.size() + artifactAbilities.size() +
+                           instantAbilities.size() + sorceryAbilities.size();
 
         // If there are no options besides passing, auto-pass without prompting
         if (totalActions == 0) {
@@ -138,6 +173,22 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             optionNum++;
         }
 
+        // Show sorcery options
+        for (SpellAbility sa : sorceryAbilities) {
+            Card sorcery = sa.getHostCard();
+            System.out.println("  " + optionNum + ". Cast sorcery: " + sorcery.getName() +
+                " - " + sorcery.getManaCost());
+            optionNum++;
+        }
+
+        // Show instant options
+        for (SpellAbility sa : instantAbilities) {
+            Card instant = sa.getHostCard();
+            System.out.println("  " + optionNum + ". Cast instant: " + instant.getName() +
+                " - " + instant.getManaCost());
+            optionNum++;
+        }
+
         // Get user input
         int choice = getIntInput(0, totalActions);
 
@@ -151,16 +202,25 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         } else {
             // Find the chosen ability
             SpellAbility chosen = null;
-            if (choice <= landAbilities.size()) {
-                chosen = landAbilities.get(choice - 1);
+            int idx = choice - 1;
+
+            if (idx < landAbilities.size()) {
+                chosen = landAbilities.get(idx);
                 System.out.println(">> Playing " + chosen.getHostCard().getName() + "...\n");
-            } else if (choice <= landAbilities.size() + creatureAbilities.size()) {
-                chosen = creatureAbilities.get(choice - landAbilities.size() - 1);
+            } else if ((idx -= landAbilities.size()) < creatureAbilities.size()) {
+                chosen = creatureAbilities.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
-            } else {
-                chosen = artifactAbilities.get(choice - landAbilities.size() - creatureAbilities.size() - 1);
+            } else if ((idx -= creatureAbilities.size()) < artifactAbilities.size()) {
+                chosen = artifactAbilities.get(idx);
+                System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
+            } else if ((idx -= artifactAbilities.size()) < sorceryAbilities.size()) {
+                chosen = sorceryAbilities.get(idx);
+                System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
+            } else if ((idx -= sorceryAbilities.size()) < instantAbilities.size()) {
+                chosen = instantAbilities.get(idx);
                 System.out.println(">> Casting " + chosen.getHostCard().getName() + "...\n");
             }
+
             return Collections.singletonList(chosen);
         }
     }
@@ -198,6 +258,50 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             if (!creatures && !c.isArtifact()) continue;
             // Skip if it's also a land (like artifact lands)
             if (c.isLand()) continue;
+
+            // Get the main spell ability (casting the card)
+            for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                // We want spell abilities that can be cast from hand
+                if (sa.isSpell() && sa.canPlay()) {
+                    spells.add(sa);
+                    break; // Only need the first castable ability
+                }
+            }
+        }
+
+        return spells;
+    }
+
+    /**
+     * Get castable sorcery spells from the player's hand.
+     */
+    private List<SpellAbility> getCastableSorceries() {
+        List<SpellAbility> spells = new ArrayList<>();
+
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            if (!c.isSorcery()) continue;
+
+            // Get the main spell ability (casting the card)
+            for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
+                // We want spell abilities that can be cast from hand
+                if (sa.isSpell() && sa.canPlay()) {
+                    spells.add(sa);
+                    break; // Only need the first castable ability
+                }
+            }
+        }
+
+        return spells;
+    }
+
+    /**
+     * Get castable instant spells from the player's hand.
+     */
+    private List<SpellAbility> getCastableInstants() {
+        List<SpellAbility> spells = new ArrayList<>();
+
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            if (!c.isInstant()) continue;
 
             // Get the main spell ability (casting the card)
             for (SpellAbility sa : c.getAllPossibleAbilities(player, true)) {
