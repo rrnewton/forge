@@ -153,13 +153,18 @@ public class TextUIGame {
     private static Deck loadDeck(String deckName, GameType type) {
         int dotPos = deckName.lastIndexOf('.');
         if (dotPos > 0 && dotPos == deckName.length() - 4) {
-            // It's a file
-            String baseDir = type.equals(GameType.Commander) ?
-                    ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+            // It's a file - first check if it's an absolute or relative path
+            File f = new File(deckName);
 
-            File f = new File(baseDir + deckName);
+            // If not found as-is, try with the base directory
             if (!f.exists()) {
-                System.out.println("Deck file not found: " + baseDir + deckName);
+                String baseDir = type.equals(GameType.Commander) ?
+                        ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+                f = new File(baseDir + deckName);
+            }
+
+            if (!f.exists()) {
+                System.out.println("Deck file not found: " + deckName);
                 return null;
             }
 
