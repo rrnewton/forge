@@ -121,9 +121,13 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Print any new game log entries
         TUIGuiBase.printNewLogEntries();
 
-        PhaseHandler ph = getGame().getPhaseHandler();
+        Game game = getGame();
+        PhaseHandler ph = game.getPhaseHandler();
+        boolean isMyTurn = ph.isPlayerTurn(player);
         boolean isMainPhase = ph.is(forge.game.phase.PhaseType.MAIN1) || ph.is(forge.game.phase.PhaseType.MAIN2);
         boolean isPostCombatMain = ph.is(forge.game.phase.PhaseType.MAIN2);
+        boolean isEndStep = ph.is(forge.game.phase.PhaseType.END_OF_TURN);
+        boolean stackHasItems = !game.getStack().isEmpty();
 
         // Get playable actions from hand
         List<SpellAbility> landAbilities = getPlayableLands();
@@ -146,22 +150,52 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         int totalActions = landAbilities.size() + creatureAbilities.size() + artifactAbilities.size() +
                            instantAbilities.size() + sorceryAbilities.size();
 
-        // If there are no options besides passing, auto-pass without prompting
-        if (totalActions == 0) {
-            System.out.println(">> Auto-passing priority (no actions available)...\n");
-            return null;
+        // Smart auto-passing on opponent's turn
+        if (!isMyTurn) {
+            // Only prompt on opponent's turn if:
+            // 1. Stack has items (we might want to respond), OR
+            // 2. It's end step AND we have instants (classic "at end of your turn" timing)
+            // 3. We have activated abilities (TODO: detect these)
+
+            boolean shouldPrompt = stackHasItems || (isEndStep && !instantAbilities.isEmpty());
+
+            if (!shouldPrompt) {
+                // Silently pass - don't spam output during opponent's turn
+                return null;
+            }
+
+            // If no actions available even though we should prompt, auto-pass with minimal output
+            if (totalActions == 0) {
+                return null;
+            }
+        } else {
+            // On our turn, if there are no options besides passing, auto-pass without prompting
+            if (totalActions == 0) {
+                System.out.println(">> Auto-passing priority (no actions available)...\n");
+                return null;
+            }
         }
 
         // Only display game state when we're prompting the user for input
         displayGameState();
 
-        // Show options to user
-        System.out.println("\n=== YOUR TURN ===");
-        if (isPostCombatMain) {
-            System.out.println("[Post-Combat Main Phase]");
-        } else if (isMainPhase) {
-            System.out.println("[Pre-Combat Main Phase]");
+        // Show options to user with context-appropriate header
+        if (!isMyTurn) {
+            System.out.println("\n=== OPPONENT'S TURN ===");
+            if (stackHasItems) {
+                System.out.println("[Respond to spell on stack]");
+            } else if (isEndStep) {
+                System.out.println("[End of opponent's turn]");
+            }
+        } else {
+            System.out.println("\n=== YOUR TURN ===");
+            if (isPostCombatMain) {
+                System.out.println("[Post-Combat Main Phase]");
+            } else if (isMainPhase) {
+                System.out.println("[Pre-Combat Main Phase]");
+            }
         }
+
         System.out.println("What would you like to do?");
         System.out.println("  0. Pass priority (do nothing)");
 
@@ -363,7 +397,29 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             System.out.println("Priority: " + priorityPlayer.getName());
         }
 
-        System.out.println("Stack: " + (game.getStack().isEmpty() ? "Empty" : game.getStack().size() + " items"));
+        // Display stack contents if not empty
+        if (game.getStack().isEmpty()) {
+            System.out.println("Stack: Empty");
+        } else {
+            System.out.println("Stack: " + game.getStack().size() + " item(s)");
+            // Show stack contents from top to bottom
+            var stackItems = game.getStack();
+            int stackPos = stackItems.size();
+            for (var item : stackItems) {
+                SpellAbility sa = item.getSpellAbility();
+                if (sa != null) {
+                    Card source = sa.getHostCard();
+                    String controller = item.getActivatingPlayer() != null ?
+                        item.getActivatingPlayer().getName() : "Unknown";
+                    System.out.println("  " + stackPos + ". " + source.getName() +
+                        " (" + controller + ")");
+                    if (sa.hasParam("Description")) {
+                        System.out.println("      " + sa.getParam("Description"));
+                    }
+                    stackPos--;
+                }
+            }
+        }
         System.out.println();
 
         // Display all players
