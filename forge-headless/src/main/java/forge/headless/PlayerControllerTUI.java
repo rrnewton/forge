@@ -66,6 +66,12 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Get playable lands from hand
         List<SpellAbility> landAbilities = getPlayableLands();
 
+        // If there are no options besides passing, auto-pass without prompting
+        if (landAbilities.isEmpty()) {
+            System.out.println(">> Auto-passing priority (no actions available)...\n");
+            return null;
+        }
+
         // Show options to user
         System.out.println("\n=== YOUR TURN ===");
         System.out.println("What would you like to do?");
