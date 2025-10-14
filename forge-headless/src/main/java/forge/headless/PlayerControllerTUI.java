@@ -10,7 +10,6 @@ import forge.deck.DeckSection;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
-import forge.game.card.CardCollectionView;
 import forge.game.combat.Combat;
 import forge.game.combat.CombatUtil;
 import forge.game.phase.PhaseHandler;
@@ -104,30 +103,130 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     @Override
     public boolean chooseTargetsFor(SpellAbility sa) {
-        // For now, use AI targeting but print what was chosen
-        // This lets the AI handle complex targeting logic while we show the user what happened
-        boolean result = super.chooseTargetsFor(sa);
-
-        if (result && sa.usesTargeting() && sa.getTargets() != null && !sa.getTargets().isEmpty()) {
-            System.out.println("\n>> Auto-targeted with " + sa.getHostCard().getName() + ":");
-            for (forge.game.GameObject target : sa.getTargets()) {
-                String desc = target.toString();
-                if (target instanceof Player) {
-                    Player p = (Player) target;
-                    desc = p.getName() + " (Life: " + p.getLife() + ")";
-                } else if (target instanceof Card) {
-                    Card c = (Card) target;
-                    desc = c.getName();
-                    if (c.isCreature()) {
-                        desc += " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
-                    }
-                }
-                System.out.println("   * " + desc);
-            }
-            System.out.println();
+        if (!sa.usesTargeting()) {
+            return true;  // No targeting needed
         }
 
-        return result;
+        forge.game.spellability.TargetRestrictions tgt = sa.getTargetRestrictions();
+        if (tgt == null) {
+            return true;  // No target restrictions
+        }
+
+        System.out.println("\n=== Choose Target for " + sa.getHostCard().getName() + " ===");
+
+        // Collect all valid targets
+        List<forge.game.GameObject> validTargets = new ArrayList<>();
+        Game game = getGame();
+
+        // Check all players as potential targets
+        for (Player p : game.getPlayers()) {
+            if (sa.canTarget(p)) {
+                validTargets.add(p);
+            }
+        }
+
+        // Check all cards on battlefield as potential targets
+        for (Player p : game.getPlayers()) {
+            for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+                if (sa.canTarget(c)) {
+                    validTargets.add(c);
+                }
+            }
+        }
+
+        // Check other zones if needed (graveyard, hand, etc.)
+        // For most burn spells, battlefield and players are enough
+
+        if (validTargets.isEmpty()) {
+            System.out.println("  No valid targets available.");
+            return false;
+        }
+
+        // Show valid targets
+        System.out.println("Select a target:");
+        for (int i = 0; i < validTargets.size(); i++) {
+            forge.game.GameObject target = validTargets.get(i);
+            String desc = formatTarget(target);
+            System.out.println("  " + i + ". " + desc);
+        }
+
+        // Get user choice
+        int choice = getIntInput(0, validTargets.size() - 1);
+        forge.game.GameObject chosen = validTargets.get(choice);
+
+        // Set the target
+        sa.getTargets().add(chosen);
+
+        System.out.println(">> Targeting " + formatTarget(chosen) + "\n");
+        return true;
+    }
+
+    /**
+     * Format a game object (player or card) for display.
+     */
+    private String formatTarget(forge.game.GameObject target) {
+        if (target instanceof Player) {
+            Player p = (Player) target;
+            return p.getName() + " (Life: " + p.getLife() + ")";
+        } else if (target instanceof Card) {
+            Card c = (Card) target;
+            String desc = c.getName();
+            if (c.isCreature()) {
+                desc += " (" + c.getNetPower() + "/" + c.getNetToughness() + ")";
+            }
+            if (c.getController() != null) {
+                desc += " [" + c.getController().getName() + "]";
+            }
+            return desc;
+        }
+        return target.toString();
+    }
+
+    /**
+     * Check if a spell ability has valid targets available.
+     * Returns true if the spell doesn't use targeting, or if it has at least one valid target.
+     */
+    private boolean hasValidTargets(SpellAbility sa) {
+        // If doesn't use targeting, it's always valid
+        if (!sa.usesTargeting()) {
+            return true;
+        }
+
+        forge.game.spellability.TargetRestrictions tgt = sa.getTargetRestrictions();
+        if (tgt == null) {
+            return true;  // No target restrictions
+        }
+
+        Game game = getGame();
+
+        // Check if any players are valid targets
+        for (Player p : game.getPlayers()) {
+            if (sa.canTarget(p)) {
+                return true;
+            }
+        }
+
+        // Check if any cards on battlefield are valid targets
+        for (Player p : game.getPlayers()) {
+            for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+                if (sa.canTarget(c)) {
+                    return true;
+                }
+            }
+        }
+
+        // Check other zones if needed (graveyard, hand, etc.)
+        // Most targeted spells check battlefield and players, but some may target other zones
+        for (Player p : game.getPlayers()) {
+            for (Card c : p.getCardsIn(ZoneType.Graveyard)) {
+                if (sa.canTarget(c)) {
+                    return true;
+                }
+            }
+        }
+
+        // No valid targets found
+        return false;
     }
 
     @Override
@@ -317,6 +416,15 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 System.out.println(">> Activating " + chosen.getHostCard().getName() + "...\n");
             }
 
+            // For spells that require targeting, choose targets now before returning
+            if (chosen != null && chosen.isSpell() && chosen.usesTargeting()) {
+                if (!chooseTargetsFor(chosen)) {
+                    // Targeting failed - don't cast the spell
+                    System.out.println("Targeting cancelled. Spell not cast.\n");
+                    return null;
+                }
+            }
+
             return Collections.singletonList(chosen);
         }
     }
@@ -388,7 +496,10 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                     // Check if player can actually pay the mana cost right now
                     sa.setActivatingPlayer(player);
                     if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
-                        spells.add(sa);
+                        // Only include if spell has valid targets (or doesn't need targets)
+                        if (hasValidTargets(sa)) {
+                            spells.add(sa);
+                        }
                     }
                     break; // Only need the first castable ability
                 }
@@ -414,7 +525,10 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                     // Check if player can actually pay the mana cost right now
                     sa.setActivatingPlayer(player);
                     if (ComputerUtilMana.canPayManaCost(sa, player, 0, false)) {
-                        spells.add(sa);
+                        // Only include if spell has valid targets (or doesn't need targets)
+                        if (hasValidTargets(sa)) {
+                            spells.add(sa);
+                        }
                     }
                     break; // Only need the first castable ability
                 }
