@@ -14,12 +14,23 @@ public class TUIGuiBase extends HeadlessGuiBase {
 
     private static volatile Game currentGame = null;
     private static volatile int lastLogIndex = 0;
+    private static volatile boolean tuiModeActive = false;
 
     /**
      * Install the TUI GUI base as the global interface.
      */
     public static void install() {
         GuiBase.setInterface(new TUIGuiBase());
+        tuiModeActive = true;
+    }
+
+    /**
+     * Check if TUI mode is currently active.
+     * In TUI mode, all player actions (including draws) are logged since
+     * both players share the same console view.
+     */
+    public static boolean isTUIMode() {
+        return tuiModeActive;
     }
 
     /**
