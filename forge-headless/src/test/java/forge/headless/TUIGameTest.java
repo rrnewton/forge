@@ -7,7 +7,6 @@ import forge.game.*;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
 import forge.gui.GuiBase;
-import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
 import org.junit.BeforeClass;
