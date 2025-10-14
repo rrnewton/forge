@@ -1271,7 +1271,11 @@ public class Player extends GameEntity implements Comparable<Player> {
                 view.updateNumDrawnThisTurn(this);
 
                 // Log the card draw
-                game.getGameLog().add(GameLogEntryType.DRAW, this + " draws " + c + ".");
+                // In TUI mode: log all draws (both players share same console)
+                // In GUI mode: only log non-AI player draws (to preserve hidden information)
+                if (shouldLogDraw()) {
+                    game.getGameLog().add(GameLogEntryType.DRAW, this + " draws " + c + ".");
+                }
 
                 final Map<AbilityKey, Object> runParams = AbilityKey.mapFromPlayer(this);
                 if (params != null) {
@@ -1448,6 +1452,29 @@ public class Player extends GameEntity implements Comparable<Player> {
     }
     public void flip() {
         numFlipsThisTurn++;
+    }
+
+    /**
+     * Determine if this player's draws should be logged.
+     * In TUI mode: log all draws (both players share same console view)
+     * In GUI mode: only log non-AI player draws (to preserve hidden information)
+     */
+    private boolean shouldLogDraw() {
+        // Check if we're in TUI mode using reflection (to avoid module dependency)
+        try {
+            Class<?> tuiGuiBaseClass = Class.forName("forge.headless.TUIGuiBase");
+            java.lang.reflect.Method isTUIModeMethod = tuiGuiBaseClass.getMethod("isTUIMode");
+            Boolean isTUIMode = (Boolean) isTUIModeMethod.invoke(null);
+            if (isTUIMode != null && isTUIMode) {
+                // In TUI mode, log all draws
+                return true;
+            }
+        } catch (Exception e) {
+            // TUIGuiBase not available or error accessing it - not in TUI mode
+        }
+
+        // In GUI mode or other modes, only log non-AI player draws
+        return !isAI();
     }
 
     public final Card discard(final Card c, final SpellAbility sa, final boolean effect, Map<AbilityKey, Object> params) {
