@@ -97,14 +97,38 @@ public class TargetingTest {
      * Set up a controlled game state for testing.
      */
     private void setupGameState(Game game, Player humanPlayer, Player aiPlayer) {
-        // This would require access to game state manipulation
-        // For now, we'll document what state we want:
-        // - Human player: 2 Mountains on battlefield, Lightning Strike in hand
-        // - AI player: 1 Creature on battlefield
-
         System.out.println("  Setting up game state...");
-        // TODO: Implement game state setup
-        // This may require reflection or special test hooks
+
+        // Get card database
+        var cardDb = FModel.getMagicDb().getCommonCards();
+
+        // Create Lightning Strike for human player's hand
+        PaperCard lightningStrikePaper = cardDb.getCard("Lightning Strike");
+        if (lightningStrikePaper != null) {
+            Card lightningStrike = Card.fromPaperCard(lightningStrikePaper, humanPlayer);
+            game.getAction().moveToHand(lightningStrike, null);
+            System.out.println("    Added Lightning Strike to hand");
+        }
+
+        // Create 2 Mountains for human player's battlefield
+        PaperCard mountainPaper = cardDb.getCard("Mountain");
+        if (mountainPaper != null) {
+            for (int i = 0; i < 2; i++) {
+                Card mountain = Card.fromPaperCard(mountainPaper, humanPlayer);
+                game.getAction().moveToPlay(mountain, humanPlayer, null, null);
+            }
+            System.out.println("    Added 2 Mountains to battlefield");
+        }
+
+        // Create a creature for AI player's battlefield
+        PaperCard creaturePaper = cardDb.getCard("Ember Hauler");
+        if (creaturePaper != null) {
+            Card creature = Card.fromPaperCard(creaturePaper, aiPlayer);
+            game.getAction().moveToPlay(creature, aiPlayer, null, null);
+            System.out.println("    Added Ember Hauler to AI battlefield");
+        }
+
+        System.out.println("  ✓ Game state setup complete");
     }
 
     /**
