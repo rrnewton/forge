@@ -804,7 +804,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     /**
      * Allow the user to view detailed information about a card.
-     * Shows cards from hand and both players' battlefields.
+     * Shows cards from hand, both players' battlefields, and graveyards.
      */
     private void viewCard() {
         Game game = getGame();
@@ -818,6 +818,13 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         // Collect cards from all battlefields
         for (Player p : game.getPlayers()) {
             for (Card c : p.getCardsIn(ZoneType.Battlefield)) {
+                allCards.add(c);
+            }
+        }
+
+        // Collect cards from all graveyards
+        for (Player p : game.getPlayers()) {
+            for (Card c : p.getCardsIn(ZoneType.Graveyard)) {
                 allCards.add(c);
             }
         }
@@ -849,6 +856,8 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             String location;
             if (c.getZone().is(ZoneType.Hand)) {
                 location = "[Hand]";
+            } else if (c.getZone().is(ZoneType.Graveyard)) {
+                location = "[Graveyard - " + c.getController().getName() + "]";
             } else {
                 location = "[Battlefield - " + c.getController().getName() + "]";
             }
@@ -911,7 +920,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             System.out.println(formattedText);
         }
 
-        // Show current state if on battlefield
+        // Show current state and location
         if (card.getZone().is(ZoneType.Battlefield)) {
             System.out.println();
             System.out.println("Current State:");
@@ -922,6 +931,12 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             if (card.isSick()) {
                 System.out.println("  [Summoning Sickness]");
             }
+        } else if (card.getZone().is(ZoneType.Hand)) {
+            System.out.println();
+            System.out.println("Location: In hand");
+        } else if (card.getZone().is(ZoneType.Graveyard)) {
+            System.out.println();
+            System.out.println("Location: In " + card.getController().getName() + "'s graveyard");
         }
 
         System.out.println("=".repeat(60));
