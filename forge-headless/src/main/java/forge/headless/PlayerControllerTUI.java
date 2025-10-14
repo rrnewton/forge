@@ -1403,6 +1403,60 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         }
     }
 
+    @Override
+    public CardCollection chooseCardsToDiscardToMaximumHandSize(int numDiscard) {
+        // Print any new game log entries
+        TUIGuiBase.printNewLogEntries();
+
+        System.out.println();
+        System.out.println("=".repeat(60));
+        System.out.println("=== DISCARD TO HAND SIZE ===");
+        System.out.println("=".repeat(60));
+        System.out.println("You must discard " + numDiscard + " card(s) to hand size limit.");
+        System.out.println();
+
+        // Get cards in hand
+        List<Card> hand = new ArrayList<>();
+        for (Card c : player.getCardsIn(ZoneType.Hand)) {
+            hand.add(c);
+        }
+
+        System.out.println("Your hand (" + hand.size() + " cards):");
+        for (int i = 0; i < hand.size(); i++) {
+            System.out.println("  " + i + ". " + hand.get(i).getName());
+        }
+        System.out.println();
+
+        CardCollection toDiscard = new CardCollection();
+
+        // Let user select cards to discard
+        for (int discardNum = 1; discardNum <= numDiscard; discardNum++) {
+            System.out.println("Select card " + discardNum + " of " + numDiscard + " to discard:");
+
+            // Show remaining cards
+            List<Card> remaining = new ArrayList<>();
+            for (Card c : hand) {
+                if (!toDiscard.contains(c)) {
+                    remaining.add(c);
+                }
+            }
+
+            for (int i = 0; i < remaining.size(); i++) {
+                System.out.println("  " + i + ". " + remaining.get(i).getName());
+            }
+
+            int choice = getIntInput(0, remaining.size() - 1);
+            Card chosen = remaining.get(choice);
+            toDiscard.add(chosen);
+
+            System.out.println(">> Will discard: " + chosen.getName());
+            System.out.println();
+        }
+
+        System.out.println(">> Discarding " + numDiscard + " card(s)...\n");
+        return toDiscard;
+    }
+
     /**
      * Deduplicate spell abilities by card name, keeping first occurrence.
      * Used for lands, creatures, artifacts, sorceries, and instants.
