@@ -1412,8 +1412,6 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("=".repeat(60));
         System.out.println("=== DISCARD TO HAND SIZE ===");
         System.out.println("=".repeat(60));
-        System.out.println("You must discard " + numDiscard + " card(s) to hand size limit.");
-        System.out.println();
 
         // Get cards in hand
         List<Card> hand = new ArrayList<>();
@@ -1421,19 +1419,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             hand.add(c);
         }
 
-        System.out.println("Your hand (" + hand.size() + " cards):");
-        for (int i = 0; i < hand.size(); i++) {
-            System.out.println("  " + i + ". " + hand.get(i).getName());
-        }
-        System.out.println();
-
         CardCollection toDiscard = new CardCollection();
 
         // Let user select cards to discard
         for (int discardNum = 1; discardNum <= numDiscard; discardNum++) {
-            System.out.println("Select card " + discardNum + " of " + numDiscard + " to discard:");
-
-            // Show remaining cards
+            // Show remaining cards with combined prompt
             List<Card> remaining = new ArrayList<>();
             for (Card c : hand) {
                 if (!toDiscard.contains(c)) {
@@ -1441,6 +1431,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 }
             }
 
+            System.out.println("Your hand (" + remaining.size() + " cards), select " + discardNum + " of " + numDiscard + " to discard:");
             for (int i = 0; i < remaining.size(); i++) {
                 System.out.println("  " + i + ". " + remaining.get(i).getName());
             }
