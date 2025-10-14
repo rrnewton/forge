@@ -1270,6 +1270,9 @@ public class Player extends GameEntity implements Comparable<Player> {
                 }
                 view.updateNumDrawnThisTurn(this);
 
+                // Log the card draw
+                game.getGameLog().add(GameLogEntryType.DRAW, this + " draws " + c + ".");
+
                 final Map<AbilityKey, Object> runParams = AbilityKey.mapFromPlayer(this);
                 if (params != null) {
                     runParams.putAll(params);

@@ -825,6 +825,26 @@ public class GameAction {
             c.setMoveToCommandZone(true);
         }
 
+        // Log interesting zone changes (after game has started)
+        if (game.getAge().ordinal() > GameStage.Mulligan.ordinal()) {
+            // Don't log discards (already logged in Player.discard) or draws (logged in Player.doDraw)
+            boolean isDiscard = params != null && params.containsKey(AbilityKey.Discard);
+
+            if (!isDiscard && zoneFrom != null && zoneFrom.is(ZoneType.Battlefield) && zoneTo.is(ZoneType.Graveyard)) {
+                // Log creatures and other permanents dying
+                if (c.isPermanent()) {
+                    game.getGameLog().add(GameLogEntryType.ZONE_CHANGE,
+                        c.getController() + "'s " + c + " dies and goes to the graveyard.");
+                }
+            } else if (zoneFrom != null && zoneFrom.is(ZoneType.Battlefield) && zoneTo.is(ZoneType.Exile)) {
+                // Log permanents being exiled from battlefield
+                if (c.isPermanent()) {
+                    game.getGameLog().add(GameLogEntryType.ZONE_CHANGE,
+                        c.getController() + "'s " + c + " is exiled.");
+                }
+            }
+        }
+
         return c;
     }
 
