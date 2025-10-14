@@ -197,7 +197,21 @@ public class GameLogFormatter extends IGameEventVisitor.Base<GameLogEntry> {
 
     @Override
     public GameLogEntry visit(GameEventTurnBegan event) {
-        String message = localizer.getMessage("lblLogTurnNOwnerByPlayer", String.valueOf(event.turnNumber()), event.turnOwner().toString());
+        Player player = event.turnOwner();
+        String baseTurnMsg = localizer.getMessage("lblLogTurnNOwnerByPlayer", String.valueOf(event.turnNumber()), player.toString());
+
+        // Add player stats summary
+        int life = player.getLife();
+        int creatures = (int) player.getCardsIn(ZoneType.Battlefield).stream().filter(Card::isCreature).count();
+        int lands = (int) player.getCardsIn(ZoneType.Battlefield).stream().filter(Card::isLand).count();
+        int graveyardSize = player.getZone(ZoneType.Graveyard).size();
+        int deckSize = player.getZone(ZoneType.Library).size();
+        int handSize = player.getZone(ZoneType.Hand).size();
+
+        String statsMsg = String.format(" life %d, creatures %d, lands %d, graveyard %d, deck %d, hand %d",
+            life, creatures, lands, graveyardSize, deckSize, handSize);
+
+        String message = baseTurnMsg + statsMsg;
         return new GameLogEntry(GameLogEntryType.TURN, message);
     }
 
