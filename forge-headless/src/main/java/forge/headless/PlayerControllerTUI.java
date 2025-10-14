@@ -39,32 +39,38 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     private final BufferedReader reader;
     private final boolean askMana;  // Whether to prompt for mana abilities
+    private final boolean numericChoices;  // Whether to use numeric-only mode
 
     // Choice tracking statistics
     private int totalChoicesMade = 0;
     private int totalChoiceOptions = 0;
 
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp) {
-        this(game, p, lp, false);
+        this(game, p, lp, false, false);
     }
 
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana) {
-        this(game, p, lp, askMana, new BufferedReader(new InputStreamReader(System.in)));
+        this(game, p, lp, askMana, false);
+    }
+
+    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana, boolean numericChoices) {
+        this(game, p, lp, askMana, numericChoices, new BufferedReader(new InputStreamReader(System.in)));
     }
 
     /**
      * Constructor with injectable reader for testing.
      */
     public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, BufferedReader reader) {
-        this(game, p, lp, false, reader);
+        this(game, p, lp, false, false, reader);
     }
 
     /**
      * Full constructor with all options.
      */
-    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana, BufferedReader reader) {
+    public PlayerControllerTUI(Game game, Player p, LobbyPlayer lp, boolean askMana, boolean numericChoices, BufferedReader reader) {
         super(game, p, lp);
         this.askMana = askMana;
+        this.numericChoices = numericChoices;
         this.reader = reader;
     }
 
@@ -729,11 +735,17 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
     /**
      * Get integer input from the user within a specified range.
-     * Also handles special commands: "?" for help, "v" for viewing cards, "g" for graveyards.
+     * In numeric mode, only accepts numeric input.
+     * In normal mode, also handles special commands: "?" for help, "v" for viewing cards, "g" for graveyards.
      */
     private int getIntInput(int min, int max) {
         while (true) {
-            System.out.print("Enter choice (" + min + "-" + max + ", or ?): ");
+            // Standardized prompt format
+            if (numericChoices) {
+                System.out.print("Enter choice (" + min + "-" + max + "): ");
+            } else {
+                System.out.print("Enter choice (" + min + "-" + max + ", or ?): ");
+            }
 
             try {
                 String line = reader.readLine();
@@ -748,20 +760,22 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                     return min;
                 }
 
-                // Handle special commands
-                if (line.equals("?")) {
-                    showHelp();
-                    continue;
-                }
+                // Handle special commands only in normal (non-numeric) mode
+                if (!numericChoices) {
+                    if (line.equals("?")) {
+                        showHelp();
+                        continue;
+                    }
 
-                if (line.equalsIgnoreCase("v")) {
-                    viewCard();
-                    continue;
-                }
+                    if (line.equalsIgnoreCase("v")) {
+                        viewCard();
+                        continue;
+                    }
 
-                if (line.equalsIgnoreCase("g")) {
-                    viewGraveyards();
-                    continue;
+                    if (line.equalsIgnoreCase("g")) {
+                        viewGraveyards();
+                        continue;
+                    }
                 }
 
                 int choice = Integer.parseInt(line);
@@ -775,7 +789,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 System.out.println("Using default choice: " + min);
                 return min;
             } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Please enter a number, '?' for help, 'v' to view a card, or 'g' to view graveyards.");
+                if (numericChoices) {
+                    System.out.println("Invalid input. Please enter a number.");
+                } else {
+                    System.out.println("Invalid input. Please enter a number, '?' for help, 'v' to view a card, or 'g' to view graveyards.");
+                }
             }
         }
     }
@@ -1034,18 +1052,6 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("=== DECLARE ATTACKERS ===");
         System.out.println("=".repeat(60));
 
-        // Show available attackers
-        System.out.println("\nAvailable attackers:");
-        for (int i = 0; i < possibleAttackers.size(); i++) {
-            Card creature = possibleAttackers.get(i);
-            System.out.println("  " + i + ". " + creature.getName() +
-                " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
-                (creature.isTapped() ? " (tapped)" : "") +
-                (creature.isSick() ? " (summoning sickness)" : ""));
-        }
-
-        System.out.println("\nChoose attackers one at a time (or enter 'done' when finished):");
-
         // Get possible defenders
         FCollectionView<GameEntity> possibleDefenders = CombatUtil.getAllPossibleDefenders(attacker);
         List<GameEntity> defendersList = new ArrayList<>();
@@ -1053,35 +1059,43 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             defendersList.add(defender);
         }
 
-        // Let user select attackers
         List<Card> selectedAttackers = new ArrayList<>();
-        while (true) {
-            System.out.print("Enter attacker number (or 'done'): ");
-            try {
-                String line = reader.readLine();
-                if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+
+        if (numericChoices) {
+            // Numeric-only mode: use structured decision tree
+            while (true) {
+                // Show available attackers with 0 = "No further attackers"
+                System.out.println("\nDeclare attackers:");
+                System.out.println("  0. No further attackers");
+                for (int i = 0; i < possibleAttackers.size(); i++) {
+                    Card creature = possibleAttackers.get(i);
+                    String status = "";
+                    if (selectedAttackers.contains(creature)) {
+                        status = " [ATTACKING]";
+                    }
+                    System.out.println("  " + (i + 1) + ". " + creature.getName() +
+                        " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" + status);
+                }
+
+                int choice = getIntInput(0, possibleAttackers.size());
+
+                if (choice == 0) {
+                    // Done selecting attackers
                     break;
                 }
 
-                int attackerIndex = Integer.parseInt(line.trim());
-                if (attackerIndex < 0 || attackerIndex >= possibleAttackers.size()) {
-                    System.out.println("Invalid attacker number.");
-                    continue;
-                }
-
-                Card selectedAttacker = possibleAttackers.get(attackerIndex);
+                Card selectedAttacker = possibleAttackers.get(choice - 1);
 
                 // Check if already selected
                 if (selectedAttackers.contains(selectedAttacker)) {
-                    System.out.println(selectedAttacker.getName() + " is already attacking.");
+                    System.out.println(">> " + selectedAttacker.getName() + " is already attacking.");
                     continue;
                 }
 
-                // If only one defender, attack them automatically
+                // Choose defender
                 GameEntity defender = null;
                 if (defendersList.size() == 1) {
                     defender = defendersList.get(0);
-                    System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
                 } else {
                     // Multiple defenders - let user choose
                     System.out.println("\nChoose defender for " + selectedAttacker.getName() + ":");
@@ -1089,33 +1103,92 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                         System.out.println("  " + i + ". " + getDefenderName(defendersList.get(i)));
                     }
 
-                    System.out.print("Enter defender number: ");
-                    String defenderLine = reader.readLine();
-                    if (defenderLine == null || defenderLine.trim().isEmpty()) {
-                        System.out.println("Cancelled attacker selection.");
-                        continue;
-                    }
-
-                    int defenderIndex = Integer.parseInt(defenderLine.trim());
-                    if (defenderIndex < 0 || defenderIndex >= defendersList.size()) {
-                        System.out.println("Invalid defender number.");
-                        continue;
-                    }
-                    defender = defendersList.get(defenderIndex);
-                    System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+                    int defenderChoice = getIntInput(0, defendersList.size() - 1);
+                    defender = defendersList.get(defenderChoice);
                 }
 
                 // Add the attacker
                 combat.addAttacker(selectedAttacker, defender);
                 selectedAttackers.add(selectedAttacker);
+                System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+            }
+        } else {
+            // Text mode: allow "done" command
+            // Show available attackers
+            System.out.println("\nAvailable attackers:");
+            for (int i = 0; i < possibleAttackers.size(); i++) {
+                Card creature = possibleAttackers.get(i);
+                System.out.println("  " + i + ". " + creature.getName() +
+                    " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
+                    (creature.isTapped() ? " (tapped)" : "") +
+                    (creature.isSick() ? " (summoning sickness)" : ""));
+            }
 
-                System.out.println("  Current attackers: " + selectedAttackers.size());
+            System.out.println("\nChoose attackers one at a time (or enter 'done' when finished):");
 
-            } catch (IOException e) {
-                System.err.println("Error reading input: " + e.getMessage());
-                break;
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Enter a number or 'done'.");
+            // Let user select attackers
+            while (true) {
+                System.out.print("Enter attacker number (or 'done'): ");
+                try {
+                    String line = reader.readLine();
+                    if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+                        break;
+                    }
+
+                    int attackerIndex = Integer.parseInt(line.trim());
+                    if (attackerIndex < 0 || attackerIndex >= possibleAttackers.size()) {
+                        System.out.println("Invalid attacker number.");
+                        continue;
+                    }
+
+                    Card selectedAttacker = possibleAttackers.get(attackerIndex);
+
+                    // Check if already selected
+                    if (selectedAttackers.contains(selectedAttacker)) {
+                        System.out.println(selectedAttacker.getName() + " is already attacking.");
+                        continue;
+                    }
+
+                    // If only one defender, attack them automatically
+                    GameEntity defender = null;
+                    if (defendersList.size() == 1) {
+                        defender = defendersList.get(0);
+                        System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+                    } else {
+                        // Multiple defenders - let user choose
+                        System.out.println("\nChoose defender for " + selectedAttacker.getName() + ":");
+                        for (int i = 0; i < defendersList.size(); i++) {
+                            System.out.println("  " + i + ". " + getDefenderName(defendersList.get(i)));
+                        }
+
+                        System.out.print("Enter defender number: ");
+                        String defenderLine = reader.readLine();
+                        if (defenderLine == null || defenderLine.trim().isEmpty()) {
+                            System.out.println("Cancelled attacker selection.");
+                            continue;
+                        }
+
+                        int defenderIndex = Integer.parseInt(defenderLine.trim());
+                        if (defenderIndex < 0 || defenderIndex >= defendersList.size()) {
+                            System.out.println("Invalid defender number.");
+                            continue;
+                        }
+                        defender = defendersList.get(defenderIndex);
+                        System.out.println(">> " + selectedAttacker.getName() + " attacks " + getDefenderName(defender));
+                    }
+
+                    // Add the attacker
+                    combat.addAttacker(selectedAttacker, defender);
+                    selectedAttackers.add(selectedAttacker);
+
+                    System.out.println("  Current attackers: " + selectedAttackers.size());
+
+                } catch (IOException e) {
+                    System.err.println("Error reading input: " + e.getMessage());
+                    break;
+                } catch (NumberFormatException e) {
+                    System.out.println("Invalid input. Enter a number or 'done'.");
+                }
             }
         }
 
@@ -1151,78 +1224,125 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("=== DECLARE BLOCKERS ===");
         System.out.println("=".repeat(60));
 
-        // Show attackers
-        System.out.println("\nAttacking creatures:");
-        for (int i = 0; i < attackers.size(); i++) {
-            Card attacker = attackers.get(i);
-            GameEntity defendingEntity = combat.getDefenderByAttacker(attacker);
-            System.out.println("  " + i + ". " + attacker.getName() +
-                " (" + attacker.getNetPower() + "/" + attacker.getNetToughness() + ")" +
-                " attacking " + getDefenderName(defendingEntity));
-        }
+        if (numericChoices) {
+            // Numeric-only mode: ask for each attacker individually
+            for (int attackerIdx = 0; attackerIdx < attackers.size(); attackerIdx++) {
+                Card attacker = attackers.get(attackerIdx);
+                GameEntity defendingEntity = combat.getDefenderByAttacker(attacker);
 
-        // Show available blockers
-        System.out.println("\nAvailable blockers:");
-        for (int i = 0; i < possibleBlockers.size(); i++) {
-            Card creature = possibleBlockers.get(i);
-            System.out.println("  " + i + ". " + creature.getName() +
-                " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
-                (creature.isTapped() ? " (tapped)" : ""));
-        }
+                System.out.println("\nAttacker " + attackerIdx + ": " + attacker.getName() +
+                    " (" + attacker.getNetPower() + "/" + attacker.getNetToughness() + ")" +
+                    " attacking " + getDefenderName(defendingEntity));
 
-        System.out.println("\nDeclare blockers (or enter 'done' when finished):");
-        System.out.println("Format: <blocker_num> blocks <attacker_num>");
-        System.out.println("Example: 0 blocks 1");
+                // Show available blockers with 0 = "No further blockers"
+                while (true) {
+                    System.out.println("Who should block this attacker?");
+                    System.out.println("  0. No further blockers");
+                    for (int i = 0; i < possibleBlockers.size(); i++) {
+                        Card creature = possibleBlockers.get(i);
+                        String status = "";
+                        if (combat.isBlocking(creature)) {
+                            status = " [BLOCKING]";
+                        }
+                        System.out.println("  " + (i + 1) + ". " + creature.getName() +
+                            " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" + status);
+                    }
 
-        // Let user assign blockers
-        while (true) {
-            System.out.print("Enter block assignment (or 'done'): ");
-            try {
-                String line = reader.readLine();
-                if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+                    int choice = getIntInput(0, possibleBlockers.size());
+
+                    if (choice == 0) {
+                        // No more blockers for this attacker
+                        break;
+                    }
+
+                    Card blocker = possibleBlockers.get(choice - 1);
+
+                    // Check if blocker can block this attacker
+                    if (!CombatUtil.canBlock(attacker, blocker, combat)) {
+                        System.out.println(">> " + blocker.getName() + " cannot block " + attacker.getName() + ".");
+                        continue;
+                    }
+
+                    // Add the blocker
+                    combat.addBlocker(attacker, blocker);
+                    System.out.println(">> " + blocker.getName() + " blocks " + attacker.getName());
+                }
+            }
+        } else {
+            // Text mode: allow "X blocks Y" format
+            // Show attackers
+            System.out.println("\nAttacking creatures:");
+            for (int i = 0; i < attackers.size(); i++) {
+                Card attacker = attackers.get(i);
+                GameEntity defendingEntity = combat.getDefenderByAttacker(attacker);
+                System.out.println("  " + i + ". " + attacker.getName() +
+                    " (" + attacker.getNetPower() + "/" + attacker.getNetToughness() + ")" +
+                    " attacking " + getDefenderName(defendingEntity));
+            }
+
+            // Show available blockers
+            System.out.println("\nAvailable blockers:");
+            for (int i = 0; i < possibleBlockers.size(); i++) {
+                Card creature = possibleBlockers.get(i);
+                System.out.println("  " + i + ". " + creature.getName() +
+                    " (" + creature.getNetPower() + "/" + creature.getNetToughness() + ")" +
+                    (creature.isTapped() ? " (tapped)" : ""));
+            }
+
+            System.out.println("\nDeclare blockers (or enter 'done' when finished):");
+            System.out.println("Format: <blocker_num> blocks <attacker_num>");
+            System.out.println("Example: 0 blocks 1");
+
+            // Let user assign blockers
+            while (true) {
+                System.out.print("Enter block assignment (or 'done'): ");
+                try {
+                    String line = reader.readLine();
+                    if (line == null || line.trim().isEmpty() || line.trim().equalsIgnoreCase("done")) {
+                        break;
+                    }
+
+                    // Parse "X blocks Y" format
+                    String[] parts = line.trim().split("\\s+");
+                    if (parts.length != 3 || !parts[1].equalsIgnoreCase("blocks")) {
+                        System.out.println("Invalid format. Use: <blocker_num> blocks <attacker_num>");
+                        continue;
+                    }
+
+                    int blockerIndex = Integer.parseInt(parts[0]);
+                    int attackerIndex = Integer.parseInt(parts[2]);
+
+                    if (blockerIndex < 0 || blockerIndex >= possibleBlockers.size()) {
+                        System.out.println("Invalid blocker number.");
+                        continue;
+                    }
+
+                    if (attackerIndex < 0 || attackerIndex >= attackers.size()) {
+                        System.out.println("Invalid attacker number.");
+                        continue;
+                    }
+
+                    Card blocker = possibleBlockers.get(blockerIndex);
+                    Card attacker = attackers.get(attackerIndex);
+
+                    // Check if blocker can block this attacker
+                    if (!CombatUtil.canBlock(attacker, blocker, combat)) {
+                        System.out.println(blocker.getName() + " cannot block " + attacker.getName() + ".");
+                        continue;
+                    }
+
+                    // Add the blocker
+                    combat.addBlocker(attacker, blocker);
+                    System.out.println(">> " + blocker.getName() + " blocks " + attacker.getName());
+
+                } catch (IOException e) {
+                    System.err.println("Error reading input: " + e.getMessage());
                     break;
-                }
-
-                // Parse "X blocks Y" format
-                String[] parts = line.trim().split("\\s+");
-                if (parts.length != 3 || !parts[1].equalsIgnoreCase("blocks")) {
+                } catch (NumberFormatException e) {
+                    System.out.println("Invalid input. Use: <blocker_num> blocks <attacker_num>");
+                } catch (ArrayIndexOutOfBoundsException e) {
                     System.out.println("Invalid format. Use: <blocker_num> blocks <attacker_num>");
-                    continue;
                 }
-
-                int blockerIndex = Integer.parseInt(parts[0]);
-                int attackerIndex = Integer.parseInt(parts[2]);
-
-                if (blockerIndex < 0 || blockerIndex >= possibleBlockers.size()) {
-                    System.out.println("Invalid blocker number.");
-                    continue;
-                }
-
-                if (attackerIndex < 0 || attackerIndex >= attackers.size()) {
-                    System.out.println("Invalid attacker number.");
-                    continue;
-                }
-
-                Card blocker = possibleBlockers.get(blockerIndex);
-                Card attacker = attackers.get(attackerIndex);
-
-                // Check if blocker can block this attacker
-                if (!CombatUtil.canBlock(attacker, blocker, combat)) {
-                    System.out.println(blocker.getName() + " cannot block " + attacker.getName() + ".");
-                    continue;
-                }
-
-                // Add the blocker
-                combat.addBlocker(attacker, blocker);
-                System.out.println(">> " + blocker.getName() + " blocks " + attacker.getName());
-
-            } catch (IOException e) {
-                System.err.println("Error reading input: " + e.getMessage());
-                break;
-            } catch (NumberFormatException e) {
-                System.out.println("Invalid input. Use: <blocker_num> blocks <attacker_num>");
-            } catch (ArrayIndexOutOfBoundsException e) {
-                System.out.println("Invalid format. Use: <blocker_num> blocks <attacker_num>");
             }
         }
 

@@ -42,6 +42,7 @@ public class TextUIGame {
         GameType type = GameType.Constructed;
         boolean player2IsTUI = false;
         boolean askMana = false;  // Default: don't prompt for mana abilities
+        boolean numericChoices = false;  // Default: use text-based prompts
 
         // Look for flags after the deck names
         for (int i = 3; i < args.length; i++) {
@@ -57,6 +58,8 @@ public class TextUIGame {
                 } else {
                     askMana = true; // If no argument, default to true
                 }
+            } else if ("--numeric-choices".equals(args[i])) {
+                numericChoices = true;
             }
         }
 
@@ -131,13 +134,13 @@ public class TextUIGame {
 
         // Install TUI controller for player 1
         if (player1GamePlayer != null) {
-            PlayerControllerTUI tuiController1 = new PlayerControllerTUI(game, player1GamePlayer, player1Lobby, askMana);
+            PlayerControllerTUI tuiController1 = new PlayerControllerTUI(game, player1GamePlayer, player1Lobby, askMana, numericChoices);
             installTUIController(player1GamePlayer, tuiController1);
         }
 
         // Install TUI controller for player 2 if requested
         if (player2IsTUI && player2GamePlayer != null) {
-            PlayerControllerTUI tuiController2 = new PlayerControllerTUI(game, player2GamePlayer, player2Lobby, askMana);
+            PlayerControllerTUI tuiController2 = new PlayerControllerTUI(game, player2GamePlayer, player2Lobby, askMana, numericChoices);
             installTUIController(player2GamePlayer, tuiController2);
         }
 
