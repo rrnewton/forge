@@ -800,6 +800,16 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                         viewGraveyards();
                         continue;
                     }
+
+                    if (line.equalsIgnoreCase("b")) {
+                        displayGameState();
+                        continue;
+                    }
+
+                    if (line.equalsIgnoreCase("s")) {
+                        viewStack();
+                        continue;
+                    }
                 }
 
                 int choice = Integer.parseInt(line);
@@ -816,7 +826,7 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 if (numericChoices) {
                     System.out.println("Invalid input. Please enter a number.");
                 } else {
-                    System.out.println("Invalid input. Please enter a number, '?' for help, 'v' to view a card, or 'g' to view graveyards.");
+                    System.out.println("Invalid input. Please enter a number or '?' for help.");
                 }
             }
         }
@@ -833,6 +843,8 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         System.out.println("  ?         - Show this help");
         System.out.println("  v         - View a card (see detailed card text)");
         System.out.println("  g         - View all graveyards");
+        System.out.println("  b         - View battlefield / game state");
+        System.out.println("  s         - View the stack");
         System.out.println();
         System.out.println("During your turn, you can:");
         System.out.println("  - Play lands (if you haven't used your land drop)");
@@ -1029,6 +1041,57 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
         System.out.println();
         System.out.println("==================");
+        System.out.println();
+    }
+
+    /**
+     * Display the current stack contents.
+     */
+    private void viewStack() {
+        Game game = getGame();
+        System.out.println();
+        System.out.println("=== STACK ===");
+
+        if (game.getStack().isEmpty()) {
+            System.out.println("Stack is empty.");
+        } else {
+            System.out.println("Stack contents (top to bottom):");
+            System.out.println();
+
+            var stackItems = game.getStack();
+            int stackPos = stackItems.size();
+            for (var item : stackItems) {
+                SpellAbility sa = item.getSpellAbility();
+                if (sa != null) {
+                    Card source = sa.getHostCard();
+                    String controller = item.getActivatingPlayer() != null ?
+                        item.getActivatingPlayer().getName() : "Unknown";
+
+                    System.out.println("  " + stackPos + ". " + source.getName() + " (" + controller + ")");
+
+                    // Show spell description if available
+                    if (sa.hasParam("Description")) {
+                        System.out.println("      " + sa.getParam("Description"));
+                    }
+
+                    // Show oracle text for more context
+                    String oracleText = source.getOracleText();
+                    if (oracleText != null && !oracleText.isEmpty()) {
+                        String formattedText = oracleText.replace("\\n", " ");
+                        // Truncate if too long
+                        if (formattedText.length() > 150) {
+                            formattedText = formattedText.substring(0, 147) + "...";
+                        }
+                        System.out.println("      " + formattedText);
+                    }
+
+                    System.out.println();
+                    stackPos--;
+                }
+            }
+        }
+
+        System.out.println("=============");
         System.out.println();
     }
 
