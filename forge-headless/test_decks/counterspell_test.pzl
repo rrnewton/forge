@@ -1,0 +1,25 @@
+[metadata]
+Name:Counterspell Test (E2E Test)
+URL:https://github.com/forge-gui/forge
+Goal:Win
+Turns:5
+Difficulty:Easy
+Description:Test scenario for counterspell functionality. P1 has counterspell and 2 islands. P2 will cast Lightning Bolt, P1 should counter it.
+[state]
+humanlife=20
+ailife=20
+turn=2
+activeplayer=ai
+activephase=MAIN1
+humanhand=Island;Island;Counterspell
+humanlibrary=Island;Island;Counterspell;Counterspell
+humangraveyard=
+humanbattlefield=
+humanexile=
+humancommand=
+aihand=Mountain;Lightning Bolt;Shock
+ailibrary=Mountain;Mountain;Lightning Bolt;Shock
+aigraveyard=
+aibattlefield=Mountain
+aiexile=
+aicommand=

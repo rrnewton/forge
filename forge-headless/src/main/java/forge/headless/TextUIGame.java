@@ -6,14 +6,20 @@ import forge.deck.io.DeckSerializer;
 import forge.game.*;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
+import forge.gamemodes.puzzle.Puzzle;
+import forge.gamemodes.puzzle.PuzzleIO;
 import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
+import forge.util.FileUtil;
+import forge.util.MyRandom;
 import forge.util.TextUtil;
 
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Random;
 
 /**
  * Text UI game mode for Forge.
@@ -43,6 +49,8 @@ public class TextUIGame {
         boolean player2IsTUI = false;
         boolean askMana = false;  // Default: don't prompt for mana abilities
         boolean numericChoices = false;  // Default: use text-based prompts
+        Long seed = null;  // Random seed for deterministic testing
+        String startStatePath = null;  // Path to .pzl file for loading game state
 
         // Look for flags after the deck names
         for (int i = 3; i < args.length; i++) {
@@ -60,7 +68,24 @@ public class TextUIGame {
                 }
             } else if ("--numeric-choices".equals(args[i])) {
                 numericChoices = true;
+            } else if ("--seed".equals(args[i]) && i + 1 < args.length) {
+                try {
+                    seed = Long.parseLong(args[i + 1]);
+                    i++; // Skip the seed value
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid seed value: " + args[i + 1]);
+                    return;
+                }
+            } else if ("--start-state".equals(args[i]) && i + 1 < args.length) {
+                startStatePath = args[i + 1];
+                i++; // Skip the path argument
             }
+        }
+
+        // Set random seed if provided (must be done BEFORE creating the game)
+        if (seed != null) {
+            System.out.println("Setting random seed: " + seed);
+            MyRandom.setRandom(new Random(seed));
         }
 
         // Load decks
@@ -147,10 +172,31 @@ public class TextUIGame {
         // Set the current game for log monitoring
         TUIGuiBase.setCurrentGame(game);
 
+        // Load game state from .pzl file if provided
+        if (startStatePath != null) {
+            System.out.println("Loading game state from: " + startStatePath);
+            if (!loadGameState(game, startStatePath)) {
+                System.err.println("Failed to load game state. Exiting.");
+                return;
+            }
+        }
+
         // Start the game
         System.out.println("Game starting...");
         System.out.println("=".repeat(60));
-        match.startGame(game);
+
+        if (startStatePath != null) {
+            // Game state was loaded, so the game is already set up
+            // Just run the game loop
+            game.getAction().invoke(() -> {
+                game.getPhaseHandler().devModeSet(game.getPhaseHandler().getPhase(),
+                                                   game.getPhaseHandler().getPlayerTurn(),
+                                                   game.getPhaseHandler().getTurn());
+            });
+        } else {
+            // Normal game start
+            match.startGame(game);
+        }
 
         // Game is over
         System.out.println();
@@ -203,11 +249,15 @@ public class TextUIGame {
         System.out.println("  -f <format>           - Game format (default: Constructed)");
         System.out.println("  -p2, --player2-tui    - Enable TUI control for player 2 (default: AI)");
         System.out.println("  --askmana [true/false] - Prompt for mana abilities (default: false)");
+        System.out.println("  --seed <long>         - Set random seed for deterministic testing");
+        System.out.println("  --start-state <file>  - Load game state from .pzl file");
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  forge-headless tui a.dck b.dck");
         System.out.println("  forge-headless tui MyDeck AIDeck -f Constructed");
         System.out.println("  forge-headless tui deck1.dck deck2.dck -p2");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --seed 12345");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --start-state puzzle.pzl");
         System.out.println();
         System.out.println("During gameplay, you will be prompted with options:");
         System.out.println("  0. Pass priority (do nothing)");
@@ -255,6 +305,42 @@ public class TextUIGame {
             return FModel.getDecks().getCommander().get(deckName);
         } else {
             return FModel.getDecks().getConstructed().get(deckName);
+        }
+    }
+
+    /**
+     * Loads a game state from a .pzl file and applies it to the game.
+     *
+     * @param game The game to apply the state to
+     * @param puzzleFilePath Path to the .pzl file
+     * @return true if successful, false otherwise
+     */
+    private static boolean loadGameState(Game game, String puzzleFilePath) {
+        try {
+            File puzzleFile = new File(puzzleFilePath);
+            if (!puzzleFile.exists()) {
+                System.err.println("Puzzle file not found: " + puzzleFilePath);
+                return false;
+            }
+
+            // Read the puzzle file
+            List<String> pfData = FileUtil.readFile(puzzleFilePath);
+
+            // Parse puzzle sections
+            Map<String, List<String>> puzzleSections = PuzzleIO.parsePuzzleSections(pfData);
+
+            // Create a Puzzle object from the parsed data
+            Puzzle puzzle = new Puzzle(puzzleSections);
+
+            // Apply the game state to the game
+            puzzle.applyToGame(game);
+
+            System.out.println("Game state loaded successfully from: " + puzzleFilePath);
+            return true;
+        } catch (Exception e) {
+            System.err.println("Error loading game state from puzzle file: " + e.getMessage());
+            e.printStackTrace();
+            return false;
         }
     }
 }
