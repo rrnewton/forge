@@ -140,6 +140,14 @@ public class PlayerControllerTUI extends PlayerControllerAi {
             }
         }
 
+        // Check spells on the stack as potential targets (for counterspells, etc.)
+        for (var stackItem : game.getStack()) {
+            SpellAbility stackSa = stackItem.getSpellAbility();
+            if (stackSa != null && sa.canTarget(stackSa)) {
+                validTargets.add(stackSa);
+            }
+        }
+
         // Check other zones if needed (graveyard, hand, etc.)
         // For most burn spells, battlefield and players are enough
 
@@ -168,12 +176,20 @@ public class PlayerControllerTUI extends PlayerControllerAi {
     }
 
     /**
-     * Format a game object (player or card) for display.
+     * Format a game object (player, card, or spell) for display.
      */
     private String formatTarget(forge.game.GameObject target) {
         if (target instanceof Player) {
             Player p = (Player) target;
             return p.getName() + " (Life: " + p.getLife() + ")";
+        } else if (target instanceof SpellAbility) {
+            SpellAbility sa = (SpellAbility) target;
+            Card source = sa.getHostCard();
+            String desc = "Spell: " + source.getName();
+            if (sa.getActivatingPlayer() != null) {
+                desc += " [" + sa.getActivatingPlayer().getName() + "]";
+            }
+            return desc;
         } else if (target instanceof Card) {
             Card c = (Card) target;
             String desc = c.getName();
@@ -228,6 +244,14 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 if (sa.canTarget(c)) {
                     return true;
                 }
+            }
+        }
+
+        // Check spells on the stack (important for counterspells!)
+        for (var stackItem : game.getStack()) {
+            SpellAbility stackSa = stackItem.getSpellAbility();
+            if (stackSa != null && sa.canTarget(stackSa)) {
+                return true;
             }
         }
 
@@ -311,9 +335,6 @@ public class PlayerControllerTUI extends PlayerControllerAi {
         int uniqueActions = uniqueLands.size() + uniqueCreatures.size() + uniqueArtifacts.size() +
                            uniqueInstants.size() + uniqueSorceries.size() + uniqueActivated.size();
 
-        // Only display game state when we're prompting the user for input
-        displayGameState();
-
         // Show options to user with context-appropriate header
         if (!isMyTurn) {
             System.out.println("\n=== OPPONENT'S TURN ===");
@@ -323,6 +344,9 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                 System.out.println("[End of opponent's turn]");
             }
         } else {
+            // Only display full game state on our own turn
+            displayGameState();
+
             System.out.println("\n=== YOUR TURN ===");
             if (isPostCombatMain) {
                 System.out.println("[Post-Combat Main Phase]");
