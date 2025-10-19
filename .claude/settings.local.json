@@ -4,7 +4,9 @@
       "Bash(time mvn -pl forge-core,forge-game,forge-ai -am package -DskipTests -Dcheckstyle.skip=true)",
       "Bash(time mvn:*)",
       "Bash(java:*)",
-      "Bash(mvn:*)"
+      "Bash(mvn:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nAdd counterspell support and streamline opponent turn display\n\n- Check spells on stack as valid targets for instants/sorceries\n- Add stack spell targeting in chooseTargetsFor() \n- Format SpellAbility objects for target display\n- Only show full game state on player''s own turn, not during opponent''s priority\n\nThis allows players to respond to opponent spells with counterspells\nand other instant-speed responses, while reducing UI clutter during\nthe opponent''s turn.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
