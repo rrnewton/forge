@@ -2,7 +2,7 @@
 # E2E test for counterspell functionality
 # This test verifies that:
 # 1. A player can counter an opponent's spell
-# 2. The game state is loaded correctly from a .pzl file
+# 2. Instants can be cast in response to opponent spells
 # 3. The RNG seed makes the game deterministic
 
 set -e  # Exit on any error
@@ -28,7 +28,7 @@ fi
 
 echo "=== Counterspell E2E Test ==="
 echo "Using JAR: $JAR_FILE"
-echo "Test scenario: P2 casts Lightning Bolt, P1 counters it"
+echo "Test scenario: Deterministic game where counterspell opportunities arise"
 echo ""
 
 # Create a temporary log file
@@ -36,24 +36,39 @@ LOG_FILE=$(mktemp)
 trap "rm -f $LOG_FILE" EXIT
 
 # Test inputs:
-# Since we're loading from a .pzl file that starts at turn 2 with specific hands,
-# the test scenario is:
-# 1. AI (P2) is active player, will cast Lightning Bolt or Shock
-# 2. P1 gets priority to respond - cast Counterspell (option 1)
-# 3. Choose target for Counterspell (option 0 - the spell on stack)
-# 4. Pass priority repeatedly to let game continue
-#
-# We'll provide enough inputs to get through multiple turns
+# With seed=42, the game is deterministic. We need to:
+# 1. Keep starting hands for both players (no mulligan) - input "0" twice
+# 2. P1's turn: Pass priority on their turn by repeatedly entering "0"
+# 3. P2's turn: P2 will cast spells, P1 gets priority to respond
+# 4. When P2 casts a spell, P1 should be offered chance to cast instant (Counterspell)
+# 5. We'll provide many "0" inputs to pass priority and let the game progress
 
-# Run the test with deterministic seed and both players controlled by TUI
+# Run the test with deterministic seed
 echo "Running game with seed=42..."
 cd "$FORGE_DIR"
-printf "0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n" | timeout 90 ./headless.sh tui \
-    "../test_decks/counterspells.dck" \
-    "../test_decks/monored.dck" \
+
+# Use absolute paths since headless.sh changes directory
+DECK1="$TEST_DECKS/counterspells.dck"
+DECK2="$TEST_DECKS/monored.dck"
+
+# Inputs:
+# - "0": Keep starting hand (no mulligan) for P1
+# - "1": Play land (Island) on turns 1, 2, 3 (we'll need mana to cast Counterspell)
+# - "0": Pass priority most of the time
+# - "1": Cast counterspell when offered (after AI casts a spell)
+# - "0": Choose target for counterspell (the spell on stack)
+# P2 is controlled by AI, so it will actually play spells that P1 can counter
+# The test will timeout after 90s or when game ends
+#
+# Input sequence:
+# - 0: Keep hand
+# - 1,0,1,0,1,0: Play land on first 3 turns and pass otherwise
+# - Then many 1,0 pairs: when AI casts, we get offered counterspell (choose 1), then target (choose 0)
+# - Fallback to all 0s at the end
+printf "0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n1\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n" | timeout 90 ./headless.sh tui \
+    "$DECK1" \
+    "$DECK2" \
     --seed 42 \
-    --start-state "../test_decks/counterspell_test.pzl" \
-    --player2-tui \
     --numeric-choices > "$LOG_FILE" 2>&1
 
 # Check if the test succeeded
@@ -78,10 +93,29 @@ else
 fi
 
 # Check if a spell was put on the stack (opponent's spell)
-if grep -q "Add to stack.*Lightning Bolt\|Add to stack.*Shock" "$LOG_FILE"; then
+# The monored deck contains various burn spells and creatures
+if grep -q "Add to stack: AI-monored cast" "$LOG_FILE"; then
     echo -e "${GREEN}✓${NC} Opponent's spell was added to the stack"
 else
     echo -e "${RED}✗${NC} No opponent spell found on stack"
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+# Check if counterspell was actually cast (not just offered)
+if grep -q "Add to stack: Player 1 cast Counterspell" "$LOG_FILE"; then
+    echo -e "${GREEN}✓${NC} Player successfully cast Counterspell"
+else
+    echo -e "${RED}✗${NC} Counterspell was not cast"
+    cat "$LOG_FILE"
+    exit 1
+fi
+
+# Check if the counterspell resolved
+if grep -q "Resolve stack: Counterspell.*Counter" "$LOG_FILE"; then
+    echo -e "${GREEN}✓${NC} Counterspell successfully countered a spell"
+else
+    echo -e "${RED}✗${NC} Counterspell did not counter anything"
     cat "$LOG_FILE"
     exit 1
 fi
@@ -97,6 +131,14 @@ echo "Keeping log file for inspection (temp file will be removed automatically)"
 # Show a snippet of the log
 echo ""
 echo "=== Log Snippet (relevant parts) ==="
-grep -E "(Counterspell|Lightning Bolt|Shock|Add to stack|Cast instant)" "$LOG_FILE" | head -20
+echo ""
+echo "Opponent spells cast:"
+grep "Add to stack: AI-monored cast" "$LOG_FILE" | head -5
+echo ""
+echo "Counterspells cast:"
+grep "Add to stack: Player 1 cast Counterspell" "$LOG_FILE"
+echo ""
+echo "Counterspell resolutions:"
+grep "Resolve stack: Counterspell.*Counter" "$LOG_FILE"
 
 exit 0
