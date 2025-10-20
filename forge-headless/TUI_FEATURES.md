@@ -18,6 +18,9 @@ Commands:
   0-9       - Select an action by number
   ?         - Show this help
   v         - View a card (see detailed card text)
+  g         - View graveyards
+  b         - View battlefield/game state
+  s         - View current stack
 
 During your turn, you can:
   - Play lands (if you haven't used your land drop)
@@ -77,9 +80,83 @@ For cards on the battlefield:
 - Controller name
 - Status flags (Tapped, Summoning Sickness, etc.)
 
+## Battlefield Viewer (`b`)
+
+At any choice prompt, type `b` to view the full game state.
+
+This displays the same information shown at the start of each turn:
+- Turn number and active phase
+- Priority holder
+- Stack contents
+- Your life total, hand size, library, graveyard
+- Your lands, creatures, and other permanents
+- Opponent's information
+
+### Example:
+```
+Enter choice (0-2, or ? for help): b
+
+============================================================
+Turn 3 - Player 1's turn
+Phase: Main phase, precombat
+Priority: Player 1
+Stack: Empty
+
+>>> [YOU] Player 1
+>>> [YOU]   Life: 20
+>>> [YOU]   Hand: 4 cards
+>>> [YOU]   Lands played this turn: 1
+>>> [YOU]   Lands in play: 3
+>>> [YOU]   Creatures: 1
+...
+```
+
+**Use Cases**:
+- Check game state after opponent's actions without waiting for your next turn
+- Verify board state before making decisions
+- See what changed after stack resolves
+
+## Stack Viewer (`s`)
+
+At any choice prompt, type `s` to view the current stack.
+
+Shows all spells and abilities on the stack from top to bottom, with:
+- Spell/ability name
+- Controller
+- Oracle text (truncated to 150 characters)
+
+### Example:
+```
+Enter choice (0-1, or ? for help): s
+
+=== STACK ===
+Stack contents (top to bottom):
+  1. Counterspell [Player 1]
+     Oracle: Counter target spell.
+  2. Lightning Bolt [Player 2]
+     Oracle: Lightning Bolt deals 3 damage to any target.
+```
+
+**Use Cases**:
+- Review what's on the stack before adding your own spell
+- Check targeting of spells before deciding whether to respond
+- Understand resolution order (top resolves first)
+
+## Graveyard Viewer (`g`)
+
+At any choice prompt, type `g` to view all players' graveyards.
+
+Shows cards in each player's graveyard, useful for:
+- Tracking what has been played/discarded
+- Planning graveyard-matters strategies
+- Checking opponent's removed threats
+
 ## Usage Tips
 
 - Use `v` frequently to check card text during gameplay
 - The card viewer includes opponent's cards so you can read their abilities
-- Press Enter (empty input) to cancel card viewing and return to your turn
-- Both `?` and `v` can be used at any prompt without consuming your action
+- Use `b` to check board state when things change during opponent's turn
+- Use `s` to review the stack before responding with instants
+- Use `g` to see what's in graveyards for recursion or exile effects
+- Press Enter (empty input) to cancel any viewer and return to your turn
+- All commands (`?`, `v`, `g`, `b`, `s`) can be used at any prompt without consuming your action
