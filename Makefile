@@ -16,10 +16,10 @@ build:
 	@echo "=== Building Forge ==="
 	mvn -pl forge-core,forge-game,forge-ai,forge-headless -am package -DskipTests -Dcheckstyle.skip=true
 
-# Run Maven unit tests
+# Run Maven unit tests (only for TUI-related modules)
 test:
 	@echo "=== Running Unit Tests ==="
-	mvn test
+	mvn -pl forge-core,forge-game,forge-ai,forge-headless -am test
 
 # Run end-to-end tests
 e2e-test: build

@@ -36,24 +36,23 @@ LOG_FILE=$(mktemp)
 trap "rm -f $LOG_FILE" EXIT
 
 # Test inputs:
-# P1's turn 2:
-#   1. Play Island (option 1)
-#   2. Pass (option 0)
-# P2's turn 2 (AI will cast Lightning Bolt targeting P1)
-# P1 responds:
-#   1. Cast Counterspell targeting Lightning Bolt (option 1 for counterspell, then 0 for target)
-#   2. Pass repeatedly (0) until game continues
+# Since we're loading from a .pzl file that starts at turn 2 with specific hands,
+# the test scenario is:
+# 1. AI (P2) is active player, will cast Lightning Bolt or Shock
+# 2. P1 gets priority to respond - cast Counterspell (option 1)
+# 3. Choose target for Counterspell (option 0 - the spell on stack)
+# 4. Pass priority repeatedly to let game continue
 #
-# Simplified: We'll pass enough times to get through several priority passes
-INPUT_SEQUENCE="1\n0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n"
+# We'll provide enough inputs to get through multiple turns
 
 # Run the test with deterministic seed and both players controlled by TUI
 echo "Running game with seed=42..."
-echo -e "$INPUT_SEQUENCE" | java -jar "$JAR_FILE" tui \
-    "$TEST_DECKS/counterspells.dck" \
-    "$TEST_DECKS/monored.dck" \
+cd "$FORGE_DIR"
+printf "0\n0\n0\n1\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n0\n" | timeout 90 ./headless.sh tui \
+    "../test_decks/counterspells.dck" \
+    "../test_decks/monored.dck" \
     --seed 42 \
-    --start-state "$TEST_DECKS/counterspell_test.pzl" \
+    --start-state "../test_decks/counterspell_test.pzl" \
     --player2-tui \
     --numeric-choices > "$LOG_FILE" 2>&1
 
