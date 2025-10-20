@@ -4,16 +4,18 @@ import forge.LobbyPlayer;
 import forge.deck.Deck;
 import forge.deck.io.DeckSerializer;
 import forge.game.*;
+import forge.game.card.Card;
+import forge.game.phase.PhaseType;
 import forge.game.player.Player;
 import forge.game.player.RegisteredPlayer;
-import forge.gamemodes.puzzle.Puzzle;
+import forge.game.zone.ZoneType;
 import forge.gamemodes.puzzle.PuzzleIO;
+import forge.item.PaperCard;
 import forge.localinstance.properties.ForgeConstants;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
 import forge.util.FileUtil;
 import forge.util.MyRandom;
-import forge.util.TextUtil;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -28,12 +30,34 @@ import java.util.Random;
 public class TextUIGame {
 
     public static void run(String[] args) {
-        FModel.initialize(null, null);
+        // Check for help flag BEFORE loading cards
+        if (args.length < 2 || (args.length >= 2 && "--help".equals(args[1]))) {
+            System.out.println("=== Forge Text UI Mode ===");
+            showHelp();
+            return;
+        }
+
+        System.out.println("=== Forge Text UI Mode ===");
+
+        // Load cards asynchronously on a background thread
+        System.out.println("Loading card database in background...");
+        Thread cardLoadingThread = new Thread(() -> {
+            FModel.initialize(null, null);
+        }, "CardLoadingThread");
+        cardLoadingThread.start();
 
         // Install TUI GUI base which intercepts game log messages
         TUIGuiBase.install();
 
-        System.out.println("=== Forge Text UI Mode ===");
+        // Wait for card loading to complete
+        try {
+            cardLoadingThread.join();
+        } catch (InterruptedException e) {
+            System.err.println("Card loading interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt();
+            return;
+        }
+        System.out.println("Card database loaded successfully.");
 
         if (args.length < 3) {
             showHelp();
@@ -46,7 +70,8 @@ public class TextUIGame {
 
         // Parse optional flags
         GameType type = GameType.Constructed;
-        boolean player2IsTUI = false;
+        AgentType player1Agent = AgentType.TUI;  // Default: interactive TUI for player 1
+        AgentType player2Agent = AgentType.AI;   // Default: AI for player 2
         boolean askMana = false;  // Default: don't prompt for mana abilities
         boolean numericChoices = false;  // Default: use text-based prompts
         Long seed = null;  // Random seed for deterministic testing
@@ -57,8 +82,28 @@ public class TextUIGame {
             if ("-f".equals(args[i]) && i + 1 < args.length) {
                 type = GameType.valueOf(args[i + 1]);
                 i++; // Skip the format argument
+            } else if ("--p1-agent".equals(args[i]) && i + 1 < args.length) {
+                try {
+                    player1Agent = AgentType.valueOf(args[i + 1].toUpperCase());
+                    i++; // Skip the agent type argument
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Invalid agent type for --p1-agent: " + args[i + 1]);
+                    System.err.println("Valid options: tui, ai, random, zero");
+                    return;
+                }
+            } else if ("--p2-agent".equals(args[i]) && i + 1 < args.length) {
+                try {
+                    player2Agent = AgentType.valueOf(args[i + 1].toUpperCase());
+                    i++; // Skip the agent type argument
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Invalid agent type for --p2-agent: " + args[i + 1]);
+                    System.err.println("Valid options: tui, ai, random, zero");
+                    return;
+                }
             } else if ("-p2".equals(args[i]) || "--player2-tui".equals(args[i])) {
-                player2IsTUI = true;
+                // Legacy flag support - convert to new agent system
+                System.out.println("Warning: --player2-tui is deprecated, use --p2-agent=tui instead");
+                player2Agent = AgentType.TUI;
             } else if ("--askmana".equals(args[i])) {
                 if (i + 1 < args.length) {
                     askMana = "true".equalsIgnoreCase(args[i + 1]);
@@ -97,40 +142,42 @@ public class TextUIGame {
             return;
         }
 
-        String player2Type = player2IsTUI ? "TUI Player 2" : "AI";
-        System.out.println("Starting game: Player 1 (" + humanDeck.getName() + ") vs " + player2Type + " (" + aiDeck.getName() + ")");
+        System.out.println("Starting game: Player 1 (" + humanDeck.getName() + ", " + player1Agent + ") vs Player 2 (" + aiDeck.getName() + ", " + player2Agent + ")");
         System.out.println();
 
         // Create players
         List<RegisteredPlayer> players = new ArrayList<>();
 
-        // Player 1 with TUI controller
+        // Player 1
         RegisteredPlayer player1;
         if (type.equals(GameType.Commander)) {
             player1 = RegisteredPlayer.forCommander(humanDeck);
         } else {
             player1 = new RegisteredPlayer(humanDeck);
         }
-        // Create a separate LobbyPlayer instance for player 1
-        LobbyPlayer player1Lobby = GamePlayerUtil.getGuiPlayer("Player 1", 0, 0, false);
+        // Create LobbyPlayer based on agent type
+        LobbyPlayer player1Lobby;
+        if (player1Agent == AgentType.AI) {
+            player1Lobby = GamePlayerUtil.createAiPlayer("AI-" + humanDeck.getName(), 0);
+        } else {
+            player1Lobby = GamePlayerUtil.getGuiPlayer("Player 1", 0, 0, false);
+        }
         player1.setPlayer(player1Lobby);
         players.add(player1);
 
-        // Player 2 (TUI or AI depending on flag)
+        // Player 2
         RegisteredPlayer player2;
-        LobbyPlayer player2Lobby;
         if (type.equals(GameType.Commander)) {
             player2 = RegisteredPlayer.forCommander(aiDeck);
         } else {
             player2 = new RegisteredPlayer(aiDeck);
         }
-        if (player2IsTUI) {
-            // Create a separate LobbyPlayer instance for player 2
-            player2Lobby = GamePlayerUtil.getGuiPlayer("Player 2", 1, 1, false);
+        // Create LobbyPlayer based on agent type
+        LobbyPlayer player2Lobby;
+        if (player2Agent == AgentType.AI) {
+            player2Lobby = GamePlayerUtil.createAiPlayer("AI-" + aiDeck.getName(), 0);
         } else {
-            // Create AI player
-            String aiName = TextUtil.concatNoSpace("AI-", aiDeck.getName());
-            player2Lobby = GamePlayerUtil.createAiPlayer(aiName, 0);
+            player2Lobby = GamePlayerUtil.getGuiPlayer("Player 2", 1, 1, false);
         }
         player2.setPlayer(player2Lobby);
         players.add(player2);
@@ -157,16 +204,14 @@ public class TextUIGame {
             }
         }
 
-        // Install TUI controller for player 1
-        if (player1GamePlayer != null) {
-            PlayerControllerTUI tuiController1 = new PlayerControllerTUI(game, player1GamePlayer, player1Lobby, askMana, numericChoices);
-            installTUIController(player1GamePlayer, tuiController1);
+        // Install controller for player 1 based on agent type
+        if (player1GamePlayer != null && player1Agent != AgentType.AI) {
+            installController(player1GamePlayer, player1Lobby, game, player1Agent, askMana, numericChoices);
         }
 
-        // Install TUI controller for player 2 if requested
-        if (player2IsTUI && player2GamePlayer != null) {
-            PlayerControllerTUI tuiController2 = new PlayerControllerTUI(game, player2GamePlayer, player2Lobby, askMana, numericChoices);
-            installTUIController(player2GamePlayer, tuiController2);
+        // Install controller for player 2 based on agent type
+        if (player2GamePlayer != null && player2Agent != AgentType.AI) {
+            installController(player2GamePlayer, player2Lobby, game, player2Agent, askMana, numericChoices);
         }
 
         // Set the current game for log monitoring
@@ -224,7 +269,7 @@ public class TextUIGame {
             }
         }
 
-        if (player2IsTUI && player2GamePlayer != null && player2GamePlayer.getController() instanceof PlayerControllerTUI) {
+        if (player2GamePlayer != null && player2GamePlayer.getController() instanceof PlayerControllerTUI) {
             PlayerControllerTUI tuiController2 = (PlayerControllerTUI) player2GamePlayer.getController();
             System.out.println("Player 2 (" + player2GamePlayer.getName() + "):");
             System.out.println("  Total choices made: " + tuiController2.getTotalChoicesMade());
@@ -240,41 +285,79 @@ public class TextUIGame {
         System.out.println("Text UI Mode - Interactive Forge Gameplay");
         System.out.println();
         System.out.println("Usage: forge-headless tui <player1_deck> <player2_deck> [options]");
+        System.out.println("       forge-headless tui --help");
         System.out.println();
         System.out.println("Arguments:");
         System.out.println("  player1_deck  - Deck file (.dck) or deck name for player 1");
         System.out.println("  player2_deck  - Deck file (.dck) or deck name for player 2");
         System.out.println();
         System.out.println("Options:");
-        System.out.println("  -f <format>           - Game format (default: Constructed)");
-        System.out.println("  -p2, --player2-tui    - Enable TUI control for player 2 (default: AI)");
+        System.out.println("  --help                 - Show this help message");
+        System.out.println("  -f <format>            - Game format (default: Constructed)");
+        System.out.println("  --p1-agent <type>      - Player 1 agent type (default: tui)");
+        System.out.println("  --p2-agent <type>      - Player 2 agent type (default: ai)");
+        System.out.println("                           Agent types: tui, ai, random, zero");
+        System.out.println("                           - tui: Interactive via stdin");
+        System.out.println("                           - ai: Forge built-in AI");
+        System.out.println("                           - random: Random valid choices");
+        System.out.println("                           - zero: Always pass (choose 0)");
         System.out.println("  --askmana [true/false] - Prompt for mana abilities (default: false)");
-        System.out.println("  --seed <long>         - Set random seed for deterministic testing");
-        System.out.println("  --start-state <file>  - Load game state from .pzl file");
+        System.out.println("  --numeric-choices      - Use numeric-only input (no text commands)");
+        System.out.println("  --seed <long>          - Set random seed for deterministic testing");
+        System.out.println("  --start-state <file>   - Load game state from .pzl file");
         System.out.println();
         System.out.println("Examples:");
+        System.out.println("  forge-headless tui --help");
         System.out.println("  forge-headless tui a.dck b.dck");
-        System.out.println("  forge-headless tui MyDeck AIDeck -f Constructed");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck -p2");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --seed 12345");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1-agent=ai --p2-agent=ai");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p2-agent=tui");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1-agent=random --seed 12345");
         System.out.println("  forge-headless tui deck1.dck deck2.dck --start-state puzzle.pzl");
         System.out.println();
         System.out.println("During gameplay, you will be prompted with options:");
         System.out.println("  0. Pass priority (do nothing)");
         System.out.println("  1-N. Play lands, cast spells, etc.");
+        System.out.println();
+        System.out.println("Interactive commands during gameplay:");
+        System.out.println("  ?  - Show help");
+        System.out.println("  v  - View cards in detail");
+        System.out.println("  g  - View graveyards");
+        System.out.println("  b  - View battlefield/game state");
+        System.out.println("  s  - View current stack");
     }
 
     /**
-     * Helper method to install a TUI controller for a player using reflection.
+     * Helper method to install a controller for a player using reflection.
      */
-    private static void installTUIController(Player gamePlayer, PlayerControllerTUI controller) {
+    private static void installController(Player gamePlayer, LobbyPlayer lobbyPlayer, Game game,
+                                          AgentType agentType, boolean askMana, boolean numericChoices) {
         try {
+            forge.game.player.PlayerController controller;
+
+            switch (agentType) {
+                case TUI:
+                    controller = new PlayerControllerTUI(game, gamePlayer, lobbyPlayer, askMana, numericChoices);
+                    break;
+                case ZERO:
+                    controller = new PlayerControllerZero(game, gamePlayer, lobbyPlayer, askMana, numericChoices);
+                    break;
+                case RANDOM:
+                    controller = new PlayerControllerRandom(game, gamePlayer, lobbyPlayer, askMana, numericChoices);
+                    break;
+                case AI:
+                    // AI controller is already installed, no need to replace
+                    return;
+                default:
+                    System.err.println("Unknown agent type: " + agentType);
+                    return;
+            }
+
             java.lang.reflect.Field controllerField = Player.class.getDeclaredField("controller");
             controllerField.setAccessible(true);
             controllerField.set(gamePlayer, controller);
-            System.out.println("TUI Controller installed for player: " + gamePlayer.getName());
+            System.out.println(agentType + " Controller installed for player: " + gamePlayer.getName());
         } catch (Exception e) {
-            System.err.println("Failed to install TUI controller: " + e.getMessage());
+            System.err.println("Failed to install controller: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -310,6 +393,7 @@ public class TextUIGame {
 
     /**
      * Loads a game state from a .pzl file and applies it to the game.
+     * This is a simplified implementation that directly manipulates zones.
      *
      * @param game The game to apply the state to
      * @param puzzleFilePath Path to the .pzl file
@@ -323,17 +407,29 @@ public class TextUIGame {
                 return false;
             }
 
-            // Read the puzzle file
+            // Read and parse the puzzle file
             List<String> pfData = FileUtil.readFile(puzzleFilePath);
-
-            // Parse puzzle sections
             Map<String, List<String>> puzzleSections = PuzzleIO.parsePuzzleSections(pfData);
 
-            // Create a Puzzle object from the parsed data
-            Puzzle puzzle = new Puzzle(puzzleSections);
+            // Get the [state] section
+            List<String> stateLines = puzzleSections.get("state");
+            if (stateLines == null || stateLines.isEmpty()) {
+                System.err.println("No [state] section found in puzzle file");
+                return false;
+            }
 
-            // Apply the game state to the game
-            puzzle.applyToGame(game);
+            // Parse state into a map
+            Map<String, String> stateMap = new java.util.HashMap<>();
+            for (String line : stateLines) {
+                if (line.contains("=")) {
+                    String[] parts = line.split("=", 2);
+                    stateMap.put(parts[0].trim(), parts[1].trim());
+                }
+            }
+
+            // Apply state to game within the game's action thread
+            final Map<String, String> finalStateMap = stateMap;
+            game.getAction().invoke(() -> applyPuzzleState(game, finalStateMap));
 
             System.out.println("Game state loaded successfully from: " + puzzleFilePath);
             return true;
@@ -341,6 +437,112 @@ public class TextUIGame {
             System.err.println("Error loading game state from puzzle file: " + e.getMessage());
             e.printStackTrace();
             return false;
+        }
+    }
+
+    /**
+     * Applies the parsed puzzle state to the game.
+     * Must be called within game.getAction().invoke()
+     */
+    private static void applyPuzzleState(Game game, Map<String, String> state) {
+        try {
+            List<Player> players = game.getPlayers();
+            if (players.size() < 2) {
+                throw new RuntimeException("Game must have at least 2 players");
+            }
+
+            Player humanPlayer = players.get(0);
+            Player aiPlayer = players.get(1);
+
+            // Set life totals
+            if (state.containsKey("humanlife")) {
+                humanPlayer.setLife(Integer.parseInt(state.get("humanlife")), null);
+            }
+            if (state.containsKey("ailife")) {
+                aiPlayer.setLife(Integer.parseInt(state.get("ailife")), null);
+            }
+
+            // Clear all zones first by removing cards one by one
+            clearZone(game, humanPlayer, ZoneType.Hand);
+            clearZone(game, humanPlayer, ZoneType.Library);
+            clearZone(game, humanPlayer, ZoneType.Battlefield);
+            clearZone(game, humanPlayer, ZoneType.Graveyard);
+
+            clearZone(game, aiPlayer, ZoneType.Hand);
+            clearZone(game, aiPlayer, ZoneType.Library);
+            clearZone(game, aiPlayer, ZoneType.Battlefield);
+            clearZone(game, aiPlayer, ZoneType.Graveyard);
+
+            // Add cards to zones
+            addCardsToZone(game, humanPlayer, ZoneType.Hand, state.get("humanhand"));
+            addCardsToZone(game, humanPlayer, ZoneType.Library, state.get("humanlibrary"));
+            addCardsToZone(game, humanPlayer, ZoneType.Battlefield, state.get("humanbattlefield"));
+            addCardsToZone(game, humanPlayer, ZoneType.Graveyard, state.get("humangraveyard"));
+
+            addCardsToZone(game, aiPlayer, ZoneType.Hand, state.get("aihand"));
+            addCardsToZone(game, aiPlayer, ZoneType.Library, state.get("ailibrary"));
+            addCardsToZone(game, aiPlayer, ZoneType.Battlefield, state.get("aibattlefield"));
+            addCardsToZone(game, aiPlayer, ZoneType.Graveyard, state.get("aigraveyard"));
+
+            // Set turn and phase
+            int turn = state.containsKey("turn") ? Integer.parseInt(state.get("turn")) : 1;
+            String activePlayerStr = state.get("activeplayer");
+            Player activePlayer = "ai".equalsIgnoreCase(activePlayerStr) ? aiPlayer : humanPlayer;
+
+            String phaseStr = state.get("activephase");
+            PhaseType phase = phaseStr != null ? PhaseType.smartValueOf(phaseStr) : PhaseType.MAIN1;
+
+            game.getPhaseHandler().devModeSet(phase, activePlayer, turn);
+
+            System.out.println("Puzzle state applied: Turn " + turn + ", " + activePlayer.getName() + "'s " + phase);
+        } catch (Exception e) {
+            System.err.println("Error applying puzzle state: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Clears all cards from a zone
+     */
+    private static void clearZone(Game game, Player player, ZoneType zone) {
+        // Make a copy of the card list to avoid concurrent modification
+        List<Card> cards = new ArrayList<Card>();
+        for (Card card : player.getZone(zone).getCards()) {
+            cards.add(card);
+        }
+        for (Card card : cards) {
+            game.getAction().exile(card, null, null);
+        }
+    }
+
+    /**
+     * Adds cards to a zone from a semicolon-separated string
+     */
+    private static void addCardsToZone(Game game, Player player, ZoneType zone, String cardListStr) {
+        if (cardListStr == null || cardListStr.trim().isEmpty()) {
+            return;
+        }
+
+        String[] cardNames = cardListStr.split(";");
+        for (String cardName : cardNames) {
+            cardName = cardName.trim();
+            if (!cardName.isEmpty()) {
+                try {
+                    // Create a card from the name
+                    PaperCard paperCard = FModel.getMagicDb().getCommonCards().getCard(cardName);
+                    if (paperCard == null) {
+                        System.err.println("Warning: Card not found: " + cardName);
+                        continue;
+                    }
+
+                    Card card = Card.fromPaperCard(paperCard, player);
+
+                    // Add to the appropriate zone
+                    player.getZone(zone).add(card);
+                } catch (Exception e) {
+                    System.err.println("Error adding card " + cardName + " to " + zone + ": " + e.getMessage());
+                }
+            }
         }
     }
 }
