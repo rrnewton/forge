@@ -764,6 +764,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
      */
     private int getIntInput(int min, int max) {
         while (true) {
+            // Inform the reader about the valid range (for random/scripted agents)
+            if (reader instanceof PlayerControllerRandom.RandomChoiceReader) {
+                ((PlayerControllerRandom.RandomChoiceReader) reader).setRange(min, max);
+            }
+
             // Standardized prompt format
             if (numericChoices) {
                 System.out.print("Enter choice (" + min + "-" + max + "): ");
@@ -1215,6 +1220,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
 
             // Let user select attackers
             while (true) {
+                // Set range for random agents
+                if (reader instanceof PlayerControllerRandom.RandomChoiceReader) {
+                    ((PlayerControllerRandom.RandomChoiceReader) reader).setRange(0, possibleAttackers.size() - 1);
+                }
+
                 System.out.print("Enter attacker number (or 'done'): ");
                 try {
                     String line = reader.readLine();
@@ -1246,6 +1256,11 @@ public class PlayerControllerTUI extends PlayerControllerAi {
                         System.out.println("\nChoose defender for " + selectedAttacker.getName() + ":");
                         for (int i = 0; i < defendersList.size(); i++) {
                             System.out.println("  " + i + ". " + getDefenderName(defendersList.get(i)));
+                        }
+
+                        // Set range for random agents
+                        if (reader instanceof PlayerControllerRandom.RandomChoiceReader) {
+                            ((PlayerControllerRandom.RandomChoiceReader) reader).setRange(0, defendersList.size() - 1);
                         }
 
                         System.out.print("Enter defender number: ");

@@ -26,36 +26,60 @@ public class PlayerControllerRandom extends PlayerControllerTUI {
 
     /**
      * A BufferedReader that generates random numeric choices when readLine() is called.
+     * Package-private so PlayerControllerTUI can detect and configure it.
      */
-    private static class RandomChoiceReader extends BufferedReader {
-        private static final int MAX_ATTEMPTS_BEFORE_ZERO = 20;
-        private int attemptCount = 0;
+    static class RandomChoiceReader extends BufferedReader {
+        private int currentMin = 0;
+        private int currentMax = 0;
+        private int consecutiveCalls = 0; // Track repeated calls with same range
 
         public RandomChoiceReader() {
             super(new EmptyReader());
         }
 
+        /**
+         * Set the valid range for the next choice.
+         * This should be called before readLine() to ensure valid random choices.
+         */
+        public void setRange(int min, int max) {
+            // Only reset counter if range actually changed
+            if (this.currentMin != min || this.currentMax != max) {
+                this.consecutiveCalls = 0;
+            }
+            this.currentMin = min;
+            this.currentMax = max;
+        }
+
         @Override
         public String readLine() throws IOException {
-            // Generate random choices, but bail out with "0" or "done" if we've tried too many times
-            // This prevents infinite loops when invalid inputs are repeatedly rejected
+            consecutiveCalls++;
 
-            attemptCount++;
-
-            // Every 20 attempts, return "0" or "done" to escape potential infinite loops
-            if (attemptCount % MAX_ATTEMPTS_BEFORE_ZERO == 0) {
-                // Alternate between "0" and "done"
-                return (attemptCount / MAX_ATTEMPTS_BEFORE_ZERO) % 2 == 0 ? "0" : "done";
+            // After a few calls with the same range, increase probability of ending loop
+            // This handles attacker/blocker selection loops
+            int endLoopChance = Math.min(consecutiveCalls * 10, 50); // Increases to 50% max
+            if (consecutiveCalls >= 2 && MyRandom.getRandom().nextInt(100) < endLoopChance) {
+                return ""; // Empty string to end loops
             }
 
-            // 30% chance to pass/skip
-            if (MyRandom.getRandom().nextInt(100) < 30) {
-                return MyRandom.getRandom().nextBoolean() ? "0" : "done";
+            // Generate a random choice within the valid range
+            if (currentMax < currentMin) {
+                // Invalid range, default to 0
+                return "0";
             }
 
-            // Generate a random number between 0 and 5 (covers most common choice ranges)
-            int choice = MyRandom.getRandom().nextInt(6);
-            return String.valueOf(choice);
+            // Generate a random number within the valid range [min, max]
+            // Bias toward choosing minimum value (30% chance) as it often means "pass" or "skip"
+            int range = currentMax - currentMin + 1;
+            int randomValue = MyRandom.getRandom().nextInt(100);
+
+            if (randomValue < 30) {
+                // 30% chance to choose minimum
+                return String.valueOf(currentMin);
+            } else {
+                // 70% chance to choose any value in the range
+                int choice = currentMin + MyRandom.getRandom().nextInt(range);
+                return String.valueOf(choice);
+            }
         }
 
         /**
