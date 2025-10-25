@@ -39,31 +39,6 @@ public class TextUIGame {
 
         System.out.println("=== Forge Text UI Mode ===");
 
-        // Load cards asynchronously on a background thread
-        System.out.println("Loading card database in background...");
-        Thread cardLoadingThread = new Thread(() -> {
-            FModel.initialize(null, null);
-        }, "CardLoadingThread");
-        cardLoadingThread.start();
-
-        // Install TUI GUI base which intercepts game log messages
-        TUIGuiBase.install();
-
-        // Wait for card loading to complete
-        try {
-            cardLoadingThread.join();
-        } catch (InterruptedException e) {
-            System.err.println("Card loading interrupted: " + e.getMessage());
-            Thread.currentThread().interrupt();
-            return;
-        }
-        System.out.println("Card database loaded successfully.");
-
-        if (args.length < 2) {
-            showHelp();
-            return;
-        }
-
         // Parse deck arguments
         String humanDeckName = args[1];
         // If a second argument exists and doesn't look like a flag, use it as second deck
@@ -76,7 +51,7 @@ public class TextUIGame {
         }
 
         // Parse optional flags
-        GameType type = GameType.Constructed;
+        String gameTypeStr = "Constructed";  // Defer GameType parsing until after FModel loads
         AgentType player1Agent = AgentType.TUI;  // Default: interactive TUI for player 1
         AgentType player2Agent = AgentType.AI;   // Default: AI for player 2
         boolean askMana = false;  // Default: don't prompt for mana abilities
@@ -101,9 +76,9 @@ public class TextUIGame {
 
             if ("-f".equals(flagName)) {
                 if (flagValue != null) {
-                    type = GameType.valueOf(flagValue);
+                    gameTypeStr = flagValue;
                 } else if (i + 1 < args.length) {
-                    type = GameType.valueOf(args[i + 1]);
+                    gameTypeStr = args[i + 1];
                     i++; // Skip the format argument
                 }
             } else if ("--p1".equals(flagName) || "--p1-agent".equals(flagName)) {
@@ -179,6 +154,36 @@ public class TextUIGame {
         if (seed != null) {
             System.out.println("Setting random seed: " + seed);
             MyRandom.setRandom(new Random(seed));
+        }
+
+        // NOW load the card database after all arguments have been validated
+        System.out.println("Loading card database...");
+        Thread cardLoadingThread = new Thread(() -> {
+            FModel.initialize(null, null);
+        }, "CardLoadingThread");
+        cardLoadingThread.start();
+
+        // Install TUI GUI base which intercepts game log messages
+        TUIGuiBase.install();
+
+        // Wait for card loading to complete
+        try {
+            cardLoadingThread.join();
+        } catch (InterruptedException e) {
+            System.err.println("Card loading interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt();
+            return;
+        }
+        System.out.println("Card database loaded successfully.");
+
+        // Now parse GameType (requires FModel to be initialized)
+        GameType type;
+        try {
+            type = GameType.valueOf(gameTypeStr);
+        } catch (IllegalArgumentException e) {
+            System.err.println("Invalid game type: " + gameTypeStr);
+            System.err.println("Valid options: Constructed, Commander, etc.");
+            return;
         }
 
         // Load decks
