@@ -47,8 +47,8 @@ timeout 30 ./headless.sh tui \
     "$DECK1" \
     "$DECK2" \
     --seed 42 \
-    --p1-agent ai \
-    --p2-agent ai > "$LOG_FILE" 2>&1
+    --p1 ai \
+    --p2 ai > "$LOG_FILE" 2>&1
 
 EXIT_CODE=$?
 

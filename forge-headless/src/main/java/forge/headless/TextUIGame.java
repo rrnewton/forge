@@ -97,37 +97,37 @@ public class TextUIGame {
                     type = GameType.valueOf(args[i + 1]);
                     i++; // Skip the format argument
                 }
-            } else if ("--p1-agent".equals(flagName)) {
+            } else if ("--p1".equals(flagName) || "--p1-agent".equals(flagName)) {
                 String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
                 if (agentValue == null) {
-                    System.err.println("Missing value for --p1-agent");
+                    System.err.println("Missing value for --p1");
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
                 try {
                     player1Agent = AgentType.valueOf(agentValue.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p1-agent: " + agentValue);
+                    System.err.println("Invalid agent type for --p1: " + agentValue);
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
-            } else if ("--p2-agent".equals(flagName)) {
+            } else if ("--p2".equals(flagName) || "--p2-agent".equals(flagName)) {
                 String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
                 if (agentValue == null) {
-                    System.err.println("Missing value for --p2-agent");
+                    System.err.println("Missing value for --p2");
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
                 try {
                     player2Agent = AgentType.valueOf(agentValue.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p2-agent: " + agentValue);
+                    System.err.println("Invalid agent type for --p2: " + agentValue);
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
-            } else if ("-p2".equals(flagName) || "--player2-tui".equals(flagName)) {
+            } else if ("--player2-tui".equals(flagName)) {
                 // Legacy flag support - convert to new agent system
-                System.out.println("Warning: --player2-tui is deprecated, use --p2-agent=tui instead");
+                System.out.println("Warning: --player2-tui is deprecated, use --p2=tui instead");
                 player2Agent = AgentType.TUI;
             } else if ("--askmana".equals(flagName)) {
                 if (flagValue != null) {
@@ -333,8 +333,8 @@ public class TextUIGame {
         System.out.println("Options:");
         System.out.println("  --help                 - Show this help message");
         System.out.println("  -f <format>            - Game format (default: Constructed)");
-        System.out.println("  --p1-agent <type>      - Player 1 agent type (default: tui)");
-        System.out.println("  --p2-agent <type>      - Player 2 agent type (default: ai)");
+        System.out.println("  --p1 <type>            - Player 1 agent type (default: tui)");
+        System.out.println("  --p2 <type>            - Player 2 agent type (default: ai)");
         System.out.println("                           Agent types: tui, ai, random, zero");
         System.out.println("                           - tui: Interactive via stdin");
         System.out.println("                           - ai: Forge built-in AI");
@@ -348,9 +348,9 @@ public class TextUIGame {
         System.out.println("Examples:");
         System.out.println("  forge-headless tui --help");
         System.out.println("  forge-headless tui a.dck b.dck");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1-agent=ai --p2-agent=ai");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p2-agent=tui");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1-agent=random --seed 12345");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1=ai --p2=ai");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p2=tui");
+        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1=random --seed 12345");
         System.out.println("  forge-headless tui deck1.dck deck2.dck --start-state puzzle.pzl");
         System.out.println();
         System.out.println("During gameplay, you will be prompted with options:");

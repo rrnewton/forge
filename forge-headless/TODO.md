@@ -57,7 +57,7 @@ java.lang.IllegalStateException: Turns already started, call this only once per 
 
 **Plan**: Create `forge-headless/test_scripts/test_counterspell.sh` that:
 - Uses `--seed 42` for deterministic testing
-- Uses `--player2-tui` to control both players
+- Uses `--p2=tui` to control both players
 - Uses `--numeric-choices` for predictable input
 - Feeds deterministic input sequence via stdin
 - Greps logs for expected events:
