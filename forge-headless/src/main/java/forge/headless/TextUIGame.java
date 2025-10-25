@@ -16,6 +16,7 @@ import forge.model.FModel;
 import forge.player.GamePlayerUtil;
 import forge.util.FileUtil;
 import forge.util.MyRandom;
+import picocli.CommandLine;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -30,125 +31,38 @@ import java.util.Random;
 public class TextUIGame {
 
     public static void run(String[] args) {
-        // Check for help flag BEFORE loading cards
-        if (args.length < 2 || (args.length >= 2 && "--help".equals(args[1]))) {
-            System.out.println("=== Forge Text UI Mode ===");
-            showHelp();
-            return;
-        }
-
         System.out.println("=== Forge Text UI Mode ===");
 
-        // Parse deck arguments
-        String humanDeckName = args[1];
-        // If a second argument exists and doesn't look like a flag, use it as second deck
-        // Otherwise, use the same deck for both players
-        String aiDeckName;
-        if (args.length >= 3 && !args[2].startsWith("-")) {
-            aiDeckName = args[2];
-        } else {
-            aiDeckName = args[1];
+        // Strip the "tui" command from args - Main.java passes it but picocli doesn't need it
+        String[] tuiArgs = new String[args.length - 1];
+        System.arraycopy(args, 1, tuiArgs, 0, args.length - 1);
+
+        // Use picocli to parse command line arguments
+        TUICommand command = new TUICommand();
+        CommandLine cmd = new CommandLine(command);
+        cmd.setUnmatchedArgumentsAllowed(false);
+
+        int exitCode = cmd.execute(tuiArgs);
+        if (exitCode != 0) {
+            System.exit(exitCode);
         }
+    }
 
-        // Parse optional flags
-        String gameTypeStr = "Constructed";  // Defer GameType parsing until after FModel loads
-        AgentType player1Agent = AgentType.TUI;  // Default: interactive TUI for player 1
-        AgentType player2Agent = AgentType.AI;   // Default: AI for player 2
-        boolean askMana = false;  // Default: don't prompt for mana abilities
-        boolean numericChoices = false;  // Default: use text-based prompts
-        Long seed = null;  // Random seed for deterministic testing
-        String startStatePath = null;  // Path to .pzl file for loading game state
-
-        // Look for flags after the deck names
-        // Start at position 2 if only one deck provided, or 3 if two decks provided
-        int flagStartPos = (args.length >= 3 && !args[2].startsWith("-")) ? 3 : 2;
-        for (int i = flagStartPos; i < args.length; i++) {
-            String arg = args[i];
-
-            // Handle both "--flag value" and "--flag=value" formats
-            String flagName = arg;
-            String flagValue = null;
-            if (arg.contains("=")) {
-                String[] parts = arg.split("=", 2);
-                flagName = parts[0];
-                flagValue = parts.length > 1 ? parts[1] : "";
-            }
-
-            if ("-f".equals(flagName)) {
-                if (flagValue != null) {
-                    gameTypeStr = flagValue;
-                } else if (i + 1 < args.length) {
-                    gameTypeStr = args[i + 1];
-                    i++; // Skip the format argument
-                }
-            } else if ("--p1".equals(flagName) || "--p1-agent".equals(flagName)) {
-                String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
-                if (agentValue == null) {
-                    System.err.println("Missing value for --p1");
-                    System.err.println("Valid options: tui, ai, random, zero");
-                    return;
-                }
-                try {
-                    player1Agent = AgentType.valueOf(agentValue.toUpperCase());
-                } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p1: " + agentValue);
-                    System.err.println("Valid options: tui, ai, random, zero");
-                    return;
-                }
-            } else if ("--p2".equals(flagName) || "--p2-agent".equals(flagName)) {
-                String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
-                if (agentValue == null) {
-                    System.err.println("Missing value for --p2");
-                    System.err.println("Valid options: tui, ai, random, zero");
-                    return;
-                }
-                try {
-                    player2Agent = AgentType.valueOf(agentValue.toUpperCase());
-                } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p2: " + agentValue);
-                    System.err.println("Valid options: tui, ai, random, zero");
-                    return;
-                }
-            } else if ("--player2-tui".equals(flagName)) {
-                // Legacy flag support - convert to new agent system
-                System.out.println("Warning: --player2-tui is deprecated, use --p2=tui instead");
-                player2Agent = AgentType.TUI;
-            } else if ("--askmana".equals(flagName)) {
-                if (flagValue != null) {
-                    askMana = "true".equalsIgnoreCase(flagValue);
-                } else if (i + 1 < args.length) {
-                    askMana = "true".equalsIgnoreCase(args[i + 1]);
-                    i++; // Skip the boolean argument
-                } else {
-                    askMana = true; // If no argument, default to true
-                }
-            } else if ("--numeric-choices".equals(flagName)) {
-                numericChoices = true;
-            } else if ("--seed".equals(flagName)) {
-                String seedValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
-                if (seedValue == null) {
-                    System.err.println("Missing value for --seed");
-                    return;
-                }
-                try {
-                    seed = Long.parseLong(seedValue);
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid seed value: " + seedValue);
-                    return;
-                }
-            } else if ("--start-state".equals(flagName)) {
-                String pathValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
-                if (pathValue == null) {
-                    System.err.println("Missing value for --start-state");
-                    return;
-                }
-                startStatePath = pathValue;
-            } else {
-                // Unrecognized argument - warn the user
-                System.err.println("Warning: Unrecognized argument: " + arg);
-                System.err.println("Run with --help to see valid options");
-            }
-        }
+    /**
+     * Run the game with parsed command-line options.
+     * Called by TUICommand after picocli parses the arguments.
+     */
+    public static void runGame(TUICommand cmd) {
+        // Extract parsed options from command
+        String humanDeckName = cmd.deck1;
+        String aiDeckName = cmd.deck2;
+        String gameTypeStr = cmd.gameType;
+        AgentType player1Agent = cmd.player1Agent;
+        AgentType player2Agent = cmd.player2Agent;
+        boolean askMana = cmd.askMana;
+        boolean numericChoices = cmd.numericChoices;
+        Long seed = cmd.seed;
+        String startStatePath = cmd.startStatePath;
 
         // Set random seed if provided (must be done BEFORE creating the game)
         if (seed != null) {
@@ -332,54 +246,6 @@ public class TextUIGame {
                 System.out.printf("  Average options per choice: %.2f%n", avgOptions);
             }
         }
-    }
-
-    private static void showHelp() {
-        System.out.println("Text UI Mode - Interactive Forge Gameplay");
-        System.out.println();
-        System.out.println("Usage: forge-headless tui <deck> [player2_deck] [options]");
-        System.out.println("       forge-headless tui --help");
-        System.out.println();
-        System.out.println("Arguments:");
-        System.out.println("  deck          - Deck file (.dck) or deck name");
-        System.out.println("                  Paths can be absolute or relative to current directory");
-        System.out.println("  player2_deck  - (Optional) Deck for player 2. If omitted, same deck as player 1");
-        System.out.println();
-        System.out.println("Options:");
-        System.out.println("  --help                 - Show this help message");
-        System.out.println("  -f <format>            - Game format (default: Constructed)");
-        System.out.println("  --p1 <type>            - Player 1 agent type (default: tui)");
-        System.out.println("  --p2 <type>            - Player 2 agent type (default: ai)");
-        System.out.println("                           Agent types: tui, ai, random, zero");
-        System.out.println("                           - tui: Interactive via stdin");
-        System.out.println("                           - ai: Forge built-in AI");
-        System.out.println("                           - random: Random valid choices");
-        System.out.println("                           - zero: Always pass (choose 0)");
-        System.out.println("  --askmana [true/false] - Prompt for mana abilities (default: false)");
-        System.out.println("  --numeric-choices      - Use numeric-only input (no text commands)");
-        System.out.println("  --seed <long>          - Set random seed for deterministic testing");
-        System.out.println("  --start-state <file>   - Load game state from .pzl file");
-        System.out.println();
-        System.out.println("Examples:");
-        System.out.println("  forge-headless tui --help");
-        System.out.println("  forge-headless tui monored.dck              # Both players use same deck");
-        System.out.println("  forge-headless tui a.dck b.dck              # Different decks");
-        System.out.println("  forge-headless tui decks/monored.dck        # Relative path");
-        System.out.println("  forge-headless tui deck1.dck --p1=ai --p2=ai");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p2=tui");
-        System.out.println("  forge-headless tui deck1.dck --p1=random --seed 12345");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --start-state puzzle.pzl");
-        System.out.println();
-        System.out.println("During gameplay, you will be prompted with options:");
-        System.out.println("  0. Pass priority (do nothing)");
-        System.out.println("  1-N. Play lands, cast spells, etc.");
-        System.out.println();
-        System.out.println("Interactive commands during gameplay:");
-        System.out.println("  ?  - Show help");
-        System.out.println("  v  - View cards in detail");
-        System.out.println("  g  - View graveyards");
-        System.out.println("  b  - View battlefield/game state");
-        System.out.println("  s  - View current stack");
     }
 
     /**
