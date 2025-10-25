@@ -763,17 +763,23 @@ public class PlayerControllerTUI extends PlayerControllerAi {
      * In normal mode, also handles special commands: "?" for help, "v" for viewing cards, "g" for graveyards.
      */
     private int getIntInput(int min, int max) {
+        // Check if we're using an automated agent (agents override isAI() to return true)
+        boolean isAutomated = this.isAI();
+
         while (true) {
             // Inform the reader about the valid range (for random/scripted agents)
             if (reader instanceof PlayerControllerRandom.RandomChoiceReader) {
                 ((PlayerControllerRandom.RandomChoiceReader) reader).setRange(min, max);
             }
 
-            // Standardized prompt format
-            if (numericChoices) {
-                System.out.print("Enter choice (" + min + "-" + max + "): ");
-            } else {
-                System.out.print("Enter choice (" + min + "-" + max + ", or ?): ");
+            // Only show prompt for interactive (non-automated) agents
+            if (!isAutomated) {
+                // Standardized prompt format
+                if (numericChoices) {
+                    System.out.print("Enter choice (" + min + "-" + max + "): ");
+                } else {
+                    System.out.print("Enter choice (" + min + "-" + max + ", or ?): ");
+                }
             }
 
             try {

@@ -24,6 +24,10 @@ test:
 # Run end-to-end tests
 e2e-test: build
 	@echo "=== Running End-to-End Tests ==="
+	@echo "Running AI vs AI test..."
+	@bash forge-headless/test_scripts/test_ai_vs_ai.sh
+	@echo ""
+	@echo "Running Counterspell test..."
 	@bash forge-headless/test_scripts/test_counterspell.sh
 
 # Validate everything before commit (unit tests + e2e tests)

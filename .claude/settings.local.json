@@ -4,7 +4,9 @@
       "Bash(git commit:*)",
       "Bash(chmod:*)",
       "Read(//workspace/**)",
-      "Bash(make:*)"
+      "Bash(make:*)",
+      "Bash(bash forge-headless/test_scripts/test_counterspell.sh:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

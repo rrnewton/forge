@@ -79,51 +79,90 @@ public class TextUIGame {
 
         // Look for flags after the deck names
         for (int i = 3; i < args.length; i++) {
-            if ("-f".equals(args[i]) && i + 1 < args.length) {
-                type = GameType.valueOf(args[i + 1]);
-                i++; // Skip the format argument
-            } else if ("--p1-agent".equals(args[i]) && i + 1 < args.length) {
-                try {
-                    player1Agent = AgentType.valueOf(args[i + 1].toUpperCase());
-                    i++; // Skip the agent type argument
-                } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p1-agent: " + args[i + 1]);
+            String arg = args[i];
+
+            // Handle both "--flag value" and "--flag=value" formats
+            String flagName = arg;
+            String flagValue = null;
+            if (arg.contains("=")) {
+                String[] parts = arg.split("=", 2);
+                flagName = parts[0];
+                flagValue = parts.length > 1 ? parts[1] : "";
+            }
+
+            if ("-f".equals(flagName)) {
+                if (flagValue != null) {
+                    type = GameType.valueOf(flagValue);
+                } else if (i + 1 < args.length) {
+                    type = GameType.valueOf(args[i + 1]);
+                    i++; // Skip the format argument
+                }
+            } else if ("--p1-agent".equals(flagName)) {
+                String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
+                if (agentValue == null) {
+                    System.err.println("Missing value for --p1-agent");
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
-            } else if ("--p2-agent".equals(args[i]) && i + 1 < args.length) {
                 try {
-                    player2Agent = AgentType.valueOf(args[i + 1].toUpperCase());
-                    i++; // Skip the agent type argument
+                    player1Agent = AgentType.valueOf(agentValue.toUpperCase());
                 } catch (IllegalArgumentException e) {
-                    System.err.println("Invalid agent type for --p2-agent: " + args[i + 1]);
+                    System.err.println("Invalid agent type for --p1-agent: " + agentValue);
                     System.err.println("Valid options: tui, ai, random, zero");
                     return;
                 }
-            } else if ("-p2".equals(args[i]) || "--player2-tui".equals(args[i])) {
+            } else if ("--p2-agent".equals(flagName)) {
+                String agentValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
+                if (agentValue == null) {
+                    System.err.println("Missing value for --p2-agent");
+                    System.err.println("Valid options: tui, ai, random, zero");
+                    return;
+                }
+                try {
+                    player2Agent = AgentType.valueOf(agentValue.toUpperCase());
+                } catch (IllegalArgumentException e) {
+                    System.err.println("Invalid agent type for --p2-agent: " + agentValue);
+                    System.err.println("Valid options: tui, ai, random, zero");
+                    return;
+                }
+            } else if ("-p2".equals(flagName) || "--player2-tui".equals(flagName)) {
                 // Legacy flag support - convert to new agent system
                 System.out.println("Warning: --player2-tui is deprecated, use --p2-agent=tui instead");
                 player2Agent = AgentType.TUI;
-            } else if ("--askmana".equals(args[i])) {
-                if (i + 1 < args.length) {
+            } else if ("--askmana".equals(flagName)) {
+                if (flagValue != null) {
+                    askMana = "true".equalsIgnoreCase(flagValue);
+                } else if (i + 1 < args.length) {
                     askMana = "true".equalsIgnoreCase(args[i + 1]);
                     i++; // Skip the boolean argument
                 } else {
                     askMana = true; // If no argument, default to true
                 }
-            } else if ("--numeric-choices".equals(args[i])) {
+            } else if ("--numeric-choices".equals(flagName)) {
                 numericChoices = true;
-            } else if ("--seed".equals(args[i]) && i + 1 < args.length) {
-                try {
-                    seed = Long.parseLong(args[i + 1]);
-                    i++; // Skip the seed value
-                } catch (NumberFormatException e) {
-                    System.err.println("Invalid seed value: " + args[i + 1]);
+            } else if ("--seed".equals(flagName)) {
+                String seedValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
+                if (seedValue == null) {
+                    System.err.println("Missing value for --seed");
                     return;
                 }
-            } else if ("--start-state".equals(args[i]) && i + 1 < args.length) {
-                startStatePath = args[i + 1];
-                i++; // Skip the path argument
+                try {
+                    seed = Long.parseLong(seedValue);
+                } catch (NumberFormatException e) {
+                    System.err.println("Invalid seed value: " + seedValue);
+                    return;
+                }
+            } else if ("--start-state".equals(flagName)) {
+                String pathValue = flagValue != null ? flagValue : (i + 1 < args.length ? args[++i] : null);
+                if (pathValue == null) {
+                    System.err.println("Missing value for --start-state");
+                    return;
+                }
+                startStatePath = pathValue;
+            } else {
+                // Unrecognized argument - warn the user
+                System.err.println("Warning: Unrecognized argument: " + arg);
+                System.err.println("Run with --help to see valid options");
             }
         }
 
