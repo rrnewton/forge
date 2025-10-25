@@ -59,14 +59,21 @@ public class TextUIGame {
         }
         System.out.println("Card database loaded successfully.");
 
-        if (args.length < 3) {
+        if (args.length < 2) {
             showHelp();
             return;
         }
 
         // Parse deck arguments
         String humanDeckName = args[1];
-        String aiDeckName = args[2];
+        // If a second argument exists and doesn't look like a flag, use it as second deck
+        // Otherwise, use the same deck for both players
+        String aiDeckName;
+        if (args.length >= 3 && !args[2].startsWith("-")) {
+            aiDeckName = args[2];
+        } else {
+            aiDeckName = args[1];
+        }
 
         // Parse optional flags
         GameType type = GameType.Constructed;
@@ -78,7 +85,9 @@ public class TextUIGame {
         String startStatePath = null;  // Path to .pzl file for loading game state
 
         // Look for flags after the deck names
-        for (int i = 3; i < args.length; i++) {
+        // Start at position 2 if only one deck provided, or 3 if two decks provided
+        int flagStartPos = (args.length >= 3 && !args[2].startsWith("-")) ? 3 : 2;
+        for (int i = flagStartPos; i < args.length; i++) {
             String arg = args[i];
 
             // Handle both "--flag value" and "--flag=value" formats
@@ -323,12 +332,13 @@ public class TextUIGame {
     private static void showHelp() {
         System.out.println("Text UI Mode - Interactive Forge Gameplay");
         System.out.println();
-        System.out.println("Usage: forge-headless tui <player1_deck> <player2_deck> [options]");
+        System.out.println("Usage: forge-headless tui <deck> [player2_deck] [options]");
         System.out.println("       forge-headless tui --help");
         System.out.println();
         System.out.println("Arguments:");
-        System.out.println("  player1_deck  - Deck file (.dck) or deck name for player 1");
-        System.out.println("  player2_deck  - Deck file (.dck) or deck name for player 2");
+        System.out.println("  deck          - Deck file (.dck) or deck name");
+        System.out.println("                  Paths can be absolute or relative to current directory");
+        System.out.println("  player2_deck  - (Optional) Deck for player 2. If omitted, same deck as player 1");
         System.out.println();
         System.out.println("Options:");
         System.out.println("  --help                 - Show this help message");
@@ -347,10 +357,12 @@ public class TextUIGame {
         System.out.println();
         System.out.println("Examples:");
         System.out.println("  forge-headless tui --help");
-        System.out.println("  forge-headless tui a.dck b.dck");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1=ai --p2=ai");
+        System.out.println("  forge-headless tui monored.dck              # Both players use same deck");
+        System.out.println("  forge-headless tui a.dck b.dck              # Different decks");
+        System.out.println("  forge-headless tui decks/monored.dck        # Relative path");
+        System.out.println("  forge-headless tui deck1.dck --p1=ai --p2=ai");
         System.out.println("  forge-headless tui deck1.dck deck2.dck --p2=tui");
-        System.out.println("  forge-headless tui deck1.dck deck2.dck --p1=random --seed 12345");
+        System.out.println("  forge-headless tui deck1.dck --p1=random --seed 12345");
         System.out.println("  forge-headless tui deck1.dck deck2.dck --start-state puzzle.pzl");
         System.out.println();
         System.out.println("During gameplay, you will be prompted with options:");
@@ -404,18 +416,24 @@ public class TextUIGame {
     private static Deck loadDeck(String deckName, GameType type) {
         int dotPos = deckName.lastIndexOf('.');
         if (dotPos > 0 && dotPos == deckName.length() - 4) {
-            // It's a file - first check if it's an absolute or relative path
+            // It's a file - try to resolve it in this order:
+            // 1. As-is (absolute or relative to current directory)
+            // 2. Relative to the base deck directory
             File f = new File(deckName);
 
             // If not found as-is, try with the base directory
             if (!f.exists()) {
                 String baseDir = type.equals(GameType.Commander) ?
                         ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
-                f = new File(baseDir + deckName);
+                f = new File(baseDir, deckName);
             }
 
             if (!f.exists()) {
                 System.out.println("Deck file not found: " + deckName);
+                System.out.println("  Tried as: " + new File(deckName).getAbsolutePath());
+                String baseDir = type.equals(GameType.Commander) ?
+                        ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+                System.out.println("  Tried in: " + new File(baseDir, deckName).getAbsolutePath());
                 return null;
             }
 
