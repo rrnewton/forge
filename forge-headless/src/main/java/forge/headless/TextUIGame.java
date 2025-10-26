@@ -71,9 +71,10 @@ public class TextUIGame {
         }
 
         // NOW load the card database after all arguments have been validated
-        System.out.println("Loading card database...");
+        // Use lazy loading to only load cards from the decks being played
+        System.out.println("Initializing Forge (lazy card loading enabled)...");
         Thread cardLoadingThread = new Thread(() -> {
-            FModel.initialize(null, null);
+            FModel.initialize(null, null, false, true);  // Enable lazy loading
         }, "CardLoadingThread");
         cardLoadingThread.start();
 

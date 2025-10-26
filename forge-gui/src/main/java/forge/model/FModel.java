@@ -154,9 +154,12 @@ public final class FModel {
     private static final Supplier<ItemPool<PaperCard>> contraptionPool = Suppliers.memoize(() -> ItemPool.createFrom(getMagicDb().getVariantCards().getAllCards(PaperCardPredicates.fromRules(CardRulesPredicates.IS_CONTRAPTION)), PaperCard.class));
 
     public static void initialize(final IProgressBar progressBar, Function<ForgePreferences, Void> adjustPrefs) {
-        initialize(progressBar, adjustPrefs, false);
+        initialize(progressBar, adjustPrefs, false, false);
     }
     public static void initialize(final IProgressBar progressBar, Function<ForgePreferences, Void> adjustPrefs, boolean isSimTest) {
+        initialize(progressBar, adjustPrefs, isSimTest, false);
+    }
+    public static void initialize(final IProgressBar progressBar, Function<ForgePreferences, Void> adjustPrefs, boolean isSimTest, boolean loadCardsLazily) {
         ImageKeys.initializeDirs(
             ForgeConstants.CACHE_CARD_PICS_DIR, ForgeConstants.CACHE_CARD_PICS_SUBDIR,
             ForgeConstants.CACHE_TOKEN_PICS_DIR, ForgeConstants.CACHE_ICON_PICS_DIR,
@@ -204,20 +207,20 @@ public final class FModel {
         loadDynamicGamedata();
 
         // Load card database
-        // Lazy loading currently disabled
+        // Use lazy loading parameter to determine whether to load all cards up front
         reader = new CardStorageReader(ForgeConstants.CARD_DATA_DIR, progressBarBridge,
-                false);
+                loadCardsLazily);
         tokenReader = new CardStorageReader(ForgeConstants.TOKEN_DATA_DIR, progressBarBridge,
-                false);
+                loadCardsLazily);
 
         try {
-           customReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_CARDS_DIR, progressBarBridge, false);
+           customReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_CARDS_DIR, progressBarBridge, loadCardsLazily);
         } catch (Exception e) {
             customReader = null;
         }
 
         try {
-            customTokenReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_TOKENS_DIR, progressBarBridge, false);
+            customTokenReader  = new CardStorageReader(ForgeConstants.USER_CUSTOM_TOKENS_DIR, progressBarBridge, loadCardsLazily);
         } catch (Exception e) {
             customTokenReader = null;
         }
@@ -240,12 +243,16 @@ public final class FModel {
         ForgePreferences.DEV_MODE = preferences.getPrefBoolean(FPref.DEV_MODE_ENABLED);
         ForgePreferences.UPLOAD_DRAFT = ForgePreferences.NET_CONN;
 
-        getMagicDb().setStandardPredicate(getFormats().getStandard().getFilterRules());
-        getMagicDb().setPioneerPredicate(getFormats().getPioneer().getFilterRules());
-        getMagicDb().setModernPredicate(getFormats().getModern().getFilterRules());
-        getMagicDb().setCommanderPredicate(getFormats().get("Commander").getFilterRules());
-        getMagicDb().setOathbreakerPredicate(getFormats().get("Oathbreaker").getFilterRules());
-        getMagicDb().setBrawlPredicate(getFormats().get("Brawl").getFilterRules());
+        // Skip format predicates and deck generation when lazy loading
+        // These operations require the full card database to be loaded
+        if (!loadCardsLazily) {
+            getMagicDb().setStandardPredicate(getFormats().getStandard().getFilterRules());
+            getMagicDb().setPioneerPredicate(getFormats().getPioneer().getFilterRules());
+            getMagicDb().setModernPredicate(getFormats().getModern().getFilterRules());
+            getMagicDb().setCommanderPredicate(getFormats().get("Commander").getFilterRules());
+            getMagicDb().setOathbreakerPredicate(getFormats().get("Oathbreaker").getFilterRules());
+            getMagicDb().setBrawlPredicate(getFormats().get("Brawl").getFilterRules());
+        }
 
         getMagicDb().setFilteredHandsEnabled(preferences.getPrefBoolean(FPref.FILTERED_HANDS));
         try {
@@ -268,8 +275,8 @@ public final class FModel {
         AiProfileUtil.loadAllProfiles(ForgeConstants.AI_PROFILE_DIR);
         AiProfileUtil.setAiSideboardingMode(AiProfileUtil.AISideboardingMode.normalizedValueOf(getPreferences().getPref(FPref.MATCH_AI_SIDEBOARDING_MODE)));
 
-        // Generate Deck Gen matrix
-        if(getPreferences().getPrefBoolean(FPref.DECKGEN_CARDBASED)) {
+        // Generate Deck Gen matrix - skip when lazy loading
+        if (!loadCardsLazily && getPreferences().getPrefBoolean(FPref.DECKGEN_CARDBASED)) {
             boolean commanderDeckGenMatrixLoaded=CardRelationMatrixGenerator.initialize();
             deckGenMatrixLoaded=CardArchetypeLDAGenerator.initialize();
             if(!commanderDeckGenMatrixLoaded){
