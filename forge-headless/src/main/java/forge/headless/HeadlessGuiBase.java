@@ -20,7 +20,8 @@ import java.net.URISyntaxException;
 import java.util.Collection;
 import java.util.List;
 import java.util.function.Consumer;
-import java.util.function.Function;
+
+import forge.util.FSerializableFunction;
 
 /**
  * Minimal headless implementation of IGuiBase for simulation mode.
@@ -132,7 +133,7 @@ public class HeadlessGuiBase implements IGuiBase {
     }
 
     @Override
-    public <T> List<T> getChoices(String message, int min, int max, Collection<T> choices, Collection<T> selected, Function<T, String> display) {
+    public <T> List<T> getChoices(String message, int min, int max, Collection<T> choices, Collection<T> selected, FSerializableFunction<T, String> display) {
         return List.copyOf(selected);
     }
 
@@ -194,6 +195,12 @@ public class HeadlessGuiBase implements IGuiBase {
     @Override
     public void browseToUrl(String url) throws IOException, URISyntaxException {
         System.out.println("Browse to: " + url);
+    }
+
+    @Override
+    public boolean isSupportedAudioFormat(File file) {
+        // Headless mode doesn't support audio
+        return false;
     }
 
     @Override

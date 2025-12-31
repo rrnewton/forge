@@ -10,6 +10,7 @@ public enum GameLogEntryType {
     ZONE_CHANGE("Zone Change"),
     PLAYER_CONTROL("Player control"),
     DAMAGE("Damage"),
+    DRAW("Draw"),
     // Where's life loss?
     LAND("Land"),
     DISCARD("Discard"),
