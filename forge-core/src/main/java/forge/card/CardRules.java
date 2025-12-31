@@ -475,11 +475,11 @@ public final class CardRules implements ICardCharacteristics {
             return getName();
 
         ICardFace mainFace = Objects.requireNonNullElse(mainPart.getFunctionalVariant(variantName), mainPart);
-        String mainPartName = Objects.requireNonNullElse(mainFace.getFlavorName(), mainFace.getName());
+        String mainPartName = mainFace.getDisplayName();
 
         if(splitType.getAggregationMethod() == CardSplitType.FaceSelectionMethod.COMBINE) {
             ICardFace otherFace = Objects.requireNonNullElse(otherPart.getFunctionalVariant(variantName), otherPart);
-            String otherPartName = Objects.requireNonNullElse(otherFace.getFlavorName(), otherFace.getName());
+            String otherPartName = otherFace.getDisplayName();
             return mainPartName + " // " + otherPartName;
         }
         else
@@ -504,16 +504,11 @@ public final class CardRules implements ICardCharacteristics {
 
         CardFace variantMain = ((CardFace) mainPart).getOrCreateFunctionalVariant(variantName);
         variantMain.setFlavorName(nameParts[0]);
-        //Rudimentary name replacement. Can't do nicknames, pronouns, ability words, or flavored keywords. Need to define variants manually for that.
-        if(mainPart.getOracleText().contains(mainPart.getName()))
-            variantMain.setOracleText(mainPart.getOracleText().replace(mainPart.getName(), nameParts[0]));
         ((CardFace) mainPart).assignMissingFieldsToVariant(variantMain);
 
         if(otherPart != null) {
             CardFace variantOther = ((CardFace) otherPart).getOrCreateFunctionalVariant(variantName);
             variantOther.setFlavorName(nameParts[1]);
-            if(otherPart.getOracleText().contains(otherPart.getName()))
-                variantMain.setOracleText(otherPart.getOracleText().replace(otherPart.getName(), nameParts[1]));
             ((CardFace) otherPart).assignMissingFieldsToVariant(variantOther);
         }
 
@@ -799,7 +794,7 @@ public final class CardRules implements ICardCharacteristics {
                         face.addTrigger(value);
                     } else if ("Types".equals(key)) {
                         face.setType(CardType.parse(value, false));
-                    } else if ("Text".equals(key) && !"no text".equals(value) && StringUtils.isNotBlank(value)) {
+                    } else if ("Text".equals(key) && StringUtils.isNotBlank(value)) {
                         face.setNonAbilityText(value);
                     }
                     break;
@@ -902,8 +897,7 @@ public final class CardRules implements ICardCharacteristics {
     }
     public boolean hasStartOfKeyword(final String k, ICardFace cf) {
         for (final String inst : cf.getKeywords()) {
-            final String[] parts = inst.split(":");
-            if ((parts[0]).equalsIgnoreCase(k)) {
+            if (inst.startsWith(k)) {
                 return true;
             }
         }

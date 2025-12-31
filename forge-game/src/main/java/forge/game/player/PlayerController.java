@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 /**
  * A prototype for player controller class
@@ -178,6 +179,11 @@ public abstract class PlayerController {
     public final void reveal(List<CardView> cards, ZoneType zone, PlayerView owner, String messagePrefix) {
         reveal(cards, zone, owner, null, true);
     }
+    public final void reveal(DelayedReveal delayedReveal) {
+        for (ZoneType zt : delayedReveal.getZone()) {
+            reveal(delayedReveal.getCards().stream().filter(c -> c.getZone() == zt).collect(Collectors.toList()), zt, delayedReveal.getOwner(), delayedReveal.getMessagePrefix());
+        }
+    }
     public abstract void reveal(List<CardView> cards, ZoneType zone, PlayerView owner, String messagePrefix, boolean addMsgSuffix);
 
     /** Shows message to player to reveal chosen cardName, creatureType, number etc. AI must analyze API to understand what that is */
@@ -202,7 +208,7 @@ public abstract class PlayerController {
     public abstract CardCollection chooseCardsToDiscardToMaximumHandSize(int numDiscard);
 
     public abstract CardCollectionView chooseCardsToDelve(int genericAmount, CardCollection grave);
-    public abstract Map<Card, ManaCostShard> chooseCardsForConvokeOrImprovise(SpellAbility sa, ManaCost manaCost, CardCollectionView untappedCards, boolean improvise);
+    public abstract Map<Card, ManaCostShard> chooseCardsForConvokeOrImprovise(SpellAbility sa, ManaCost manaCost, CardCollectionView untappedCards, boolean artifacts, boolean creatures, Integer maxReduction);
     public abstract List<Card> chooseCardsForSplice(SpellAbility sa, List<Card> cards);
 
     public abstract CardCollectionView chooseCardsToRevealFromHand(int min, int max, CardCollectionView valid);
@@ -267,7 +273,7 @@ public abstract class PlayerController {
 
     public abstract byte chooseColor(String message, SpellAbility sa, ColorSet colors);
     public abstract byte chooseColorAllowColorless(String message, Card c, ColorSet colors);
-    public abstract List<String> chooseColors(String message, SpellAbility sa, int min, int max, List<String> options);
+    public abstract ColorSet chooseColors(String message, SpellAbility sa, int min, int max, ColorSet options);
 
     public abstract ICardFace chooseSingleCardFace(SpellAbility sa, String message, Predicate<ICardFace> cpp, String name);
     public abstract ICardFace chooseSingleCardFace(SpellAbility sa, List<ICardFace> faces, String message);

@@ -75,11 +75,13 @@ public class Game {
 
     private List<Card> activePlanes = null;
 
-    public final Phase cleanup;
-    public final Phase endOfCombat;
-    public final Phase endOfTurn;
     public final Untap untap;
     public final Phase upkeep;
+    public final Phase beginOfCombat;
+    public final Phase endOfCombat;
+    public final Phase endOfTurn;
+    public final Phase cleanup;
+
     // to execute commands for "current" phase each time state based action is checked
     public final List<GameCommand> sbaCheckedCommandList;
     public final MagicStack stack;
@@ -363,9 +365,10 @@ public class Game {
 
         untap = new Untap(this);
         upkeep = new Phase(PhaseType.UPKEEP);
-        cleanup = new Phase(PhaseType.CLEANUP);
+        beginOfCombat = new Phase(PhaseType.COMBAT_BEGIN);
         endOfCombat = new Phase(PhaseType.COMBAT_END);
         endOfTurn = new Phase(PhaseType.END_OF_TURN);
+        cleanup = new Phase(PhaseType.CLEANUP);
 
         sbaCheckedCommandList = new ArrayList<>();
 
@@ -428,6 +431,9 @@ public class Game {
     public final Phase getUpkeep() {
         return upkeep;
     }
+    public final Phase getBeginOfCombat() {
+        return beginOfCombat;
+    }
     public final Phase getEndOfCombat() {
         return endOfCombat;
     }
@@ -448,9 +454,19 @@ public class Game {
         sbaCheckedCommandList.clear();
     }
 
+    public final StaticEffects getStaticEffects() {
+        return staticEffects;
+    }
+    public final ReplacementHandler getReplacementHandler() {
+        return replacementHandler;
+    }
+    public final TriggerHandler getTriggerHandler() {
+        return triggerHandler;
+    }
     public final PhaseHandler getPhaseHandler() {
         return phaseHandler;
     }
+
     public final void updateTurnForView() {
         view.updateTurn(phaseHandler);
     }
@@ -466,14 +482,6 @@ public class Game {
     }
     public final void updateStackForView() {
         view.updateStack(stack);
-    }
-
-    public final StaticEffects getStaticEffects() {
-        return staticEffects;
-    }
-
-    public final TriggerHandler getTriggerHandler() {
-        return triggerHandler;
     }
 
     public final Combat getCombat() {
@@ -543,10 +551,6 @@ public class Game {
 
     public final Game getMaingame() {
         return maingame;
-    }
-
-    public ReplacementHandler getReplacementHandler() {
-        return replacementHandler;
     }
 
     public synchronized boolean isGameOver() {
@@ -850,7 +854,7 @@ public class Game {
         for (Card c : cards) {
             // CR 800.4d if card is controlled by opponent, LTB should trigger
             if (c.getOwner().equals(p) && c.getController().equals(p)) {
-                c.getGame().getTriggerHandler().clearActiveTriggers(c, null);
+                getTriggerHandler().clearActiveTriggers(c, null);
             }
         }
 
