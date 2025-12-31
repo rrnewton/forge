@@ -11,6 +11,7 @@ public enum GameLogEntryType {
     PLAYER_CONTROL("Player Control"),
     DAMAGE("Damage"),
     LIFE("Life"),
+    DRAW("Draw"),
     LAND("Land"),
     DISCARD("Discard"),
     COMBAT("Combat"),
