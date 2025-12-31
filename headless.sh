@@ -18,4 +18,14 @@ for arg in "$@"; do
     args+=("$arg")
 done
 
-cd "$script_dir/forge-headless/target" && time java -jar forge-headless-*-SNAPSHOT-jar-with-dependencies.jar "${args[@]}"
+# Find the JAR file - use the most recently modified if multiple exist
+target_dir="$script_dir/forge-headless/target"
+jar_file=$(ls -t "$target_dir"/forge-headless-*-SNAPSHOT-jar-with-dependencies.jar 2>/dev/null | head -1)
+
+if [[ -z "$jar_file" ]]; then
+    echo "Error: No forge-headless JAR found in $target_dir" >&2
+    echo "Run 'make build' in forge-java/forge-headless first" >&2
+    exit 1
+fi
+
+cd "$target_dir" && time java -jar "$(basename "$jar_file")" "${args[@]}"
