@@ -57,8 +57,14 @@ public class SimulateMatch {
                     return;
                 }
 
-                options = new ArrayList<>();
-                params.put(a.substring(1), options);
+                String key = a.substring(1);
+                // Check if we already have this parameter key - if so, append to existing list
+                if (params.containsKey(key)) {
+                    options = params.get(key);
+                } else {
+                    options = new ArrayList<>();
+                    params.put(key, options);
+                }
             } else if (options != null) {
                 options.add(a);
             } else {
@@ -104,6 +110,10 @@ public class SimulateMatch {
 
         int i = 1;
 
+
+        // Check if random controller mode is enabled (for benchmarking)
+        boolean useRandomController = params.containsKey("r");
+
         if (params.containsKey("d")) {
             for (String deck : params.get("d")) {
                 Deck d = deckFromCommandLineParameter(deck, type);
@@ -114,7 +124,8 @@ public class SimulateMatch {
                 if (i > 1) {
                     sb.append(" vs ");
                 }
-                String name = TextUtil.concatNoSpace("Ai(", String.valueOf(i), ")-", d.getName());
+                String prefix = useRandomController ? "Rnd(" : "Ai(";
+                String name = TextUtil.concatNoSpace(prefix, String.valueOf(i), ")-", d.getName());
                 sb.append(name);
 
                 RegisteredPlayer rp;
@@ -124,7 +135,13 @@ public class SimulateMatch {
                 } else {
                     rp = new RegisteredPlayer(d);
                 }
-                rp.setPlayer(GamePlayerUtil.createAiPlayer(name, i - 1));
+
+                // Use random controller for benchmarking, or full AI
+                if (useRandomController) {
+                    rp.setPlayer(new LobbyPlayerRandom(name, 42 + i));
+                } else {
+                    rp.setPlayer(GamePlayerUtil.createAiPlayer(name, i - 1));
+                }
                 pp.add(rp);
                 i++;
             }
@@ -168,6 +185,7 @@ public class SimulateMatch {
         System.out.println("\tP - Amount of players per match (used only with Tournaments, defaults to 2)");
         System.out.println("\tF - format of games, defaults to constructed");
         System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
+        System.out.println("\tr - Random controller mode. Uses lightweight random controller instead of full AI (for benchmarking).");
         System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
     }
 
@@ -176,6 +194,7 @@ public class SimulateMatch {
         sw.start();
 
         final Game g1 = mc.createGame();
+
         // will run match in the same thread
         try {
             TimeLimitedCodeBlock.runWithTimeout(() -> {
