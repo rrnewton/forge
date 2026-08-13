@@ -22,6 +22,7 @@ public final class Main {
             System.out.println("Known modes:");
             System.out.println("  sim - Simulation mode (AI vs AI)");
             System.out.println("  tui - Text UI mode (Interactive gameplay)");
+            System.out.println("  bridge - Foreign-bot JSON-RPC bridge mode");
             System.out.println("Run 'java -jar forge-headless.jar sim' for simulation help");
             System.out.println("Run 'java -jar forge-headless.jar tui' for TUI help");
             System.exit(1);
@@ -39,9 +40,13 @@ public final class Main {
                 TextUIGame.run(args);
                 break;
 
+            case "bridge":
+                System.exit(BridgeMain.run(args, System.in, System.out, System.err));
+                return;
+
             default:
                 System.out.println("Unknown mode: " + mode);
-                System.out.println("Known modes: 'sim', 'tui'");
+                System.out.println("Known modes: 'sim', 'tui', 'bridge'");
                 break;
         }
 
