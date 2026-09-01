@@ -1,4 +1,4 @@
-package forge.view;
+package forge.headless;
 
 import java.io.File;
 import java.util.*;

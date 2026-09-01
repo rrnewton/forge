@@ -36,7 +36,7 @@ import forge.localinstance.properties.ForgeConstants;
 import forge.localinstance.properties.ForgePreferences;
 import forge.model.FModel;
 import forge.player.GamePlayerUtil;
-import forge.view.SimulateMatch;
+import forge.headless.SimulateMatch;
 
 public class PlanarConquestGeneraterGA extends AbstractGeneticAlgorithm<Deck> {
 
