@@ -1,4 +1,4 @@
-package forge.view;
+package forge.headless;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;

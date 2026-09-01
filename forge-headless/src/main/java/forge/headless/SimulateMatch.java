@@ -1,4 +1,4 @@
-package forge.view;
+package forge.headless;
 
 import java.io.File;
 import java.util.*;
@@ -37,10 +37,15 @@ import forge.util.storage.IStorage;
 
 public class SimulateMatch {
     public static void simulate(String[] args) {
+        if (args.length == 2 && ("--help".equals(args[1]) || "-h".equals(args[1]))) {
+            argumentHelp();
+            return;
+        }
+
         FModel.initialize(null, null);
 
-        System.out.println("Simulation mode");
         if (args.length < 4) {
+            System.err.println("Missing required deck arguments.");
             argumentHelp();
             return;
         }
@@ -82,6 +87,7 @@ public class SimulateMatch {
         }
 
         boolean outputGamelog = !params.containsKey("q");
+        boolean useRandomController = params.containsKey("r");
 
         Long seed = null;
         if (params.containsKey("s")) {
@@ -102,6 +108,10 @@ public class SimulateMatch {
         }
 
         if (params.containsKey("t")) {
+            if (useRandomController) {
+                System.err.println("Random-controller mode is not supported for tournaments.");
+                return;
+            }
             simulateTournament(params, rules, outputGamelog);
             System.out.flush();
             return;
@@ -116,6 +126,10 @@ public class SimulateMatch {
         // AI settings against another, which is the only way to tell from the results whether an AI
         // change actually helped.
         List<String> aiProfiles = params.get("a");
+        if (aiProfiles != null && useRandomController) {
+            System.err.println("AI profiles cannot be combined with random-controller mode.");
+            return;
+        }
         if (aiProfiles != null) {
             for (String profile : aiProfiles) {
                 if (!AiProfileUtil.getProfilesDisplayList().contains(profile)) {
@@ -137,7 +151,8 @@ public class SimulateMatch {
                     sb.append(" vs ");
                 }
                 String profile = aiProfiles != null && aiProfiles.size() >= i ? aiProfiles.get(i - 1) : "";
-                String name = TextUtil.concatNoSpace("Ai(", String.valueOf(i), ")-", d.getName());
+                String controllerName = useRandomController ? "Random" : "Ai";
+                String name = TextUtil.concatNoSpace(controllerName, "(", String.valueOf(i), ")-", d.getName());
                 sb.append(name);
                 if (!profile.isEmpty()) {
                     sb.append(" [").append(profile).append("]");
@@ -150,7 +165,10 @@ public class SimulateMatch {
                 } else {
                     rp = new RegisteredPlayer(d);
                 }
-                rp.setPlayer(GamePlayerUtil.createAiPlayer(name, i - 1, profile));
+                LobbyPlayer lobbyPlayer = useRandomController
+                        ? new LobbyPlayerRandom(name, MyRandom.getRandom().nextLong())
+                        : GamePlayerUtil.createAiPlayer(name, i - 1, profile);
+                rp.setPlayer(lobbyPlayer);
                 pp.add(rp);
                 i++;
             }
@@ -186,20 +204,31 @@ public class SimulateMatch {
     }
 
     private static void argumentHelp() {
-        System.out.println("Syntax: forge.exe sim -d <deck1[.dck]> ... <deckX[.dck]> -D [D] -n [N] -m [M] -t [T] -p [P] -f [F] -s [S] -a [A] -q");
-        System.out.println("\tsim - stands for simulation mode");
-        System.out.println("\tdeck1 (or deck2,...,X) - constructed deck name or filename (has to be quoted when contains multiple words)");
-        System.out.println("\tdeck is treated as file if it ends with a dot followed by three numbers or letters");
-        System.out.println("\tD - absolute directory to load decks from");
-        System.out.println("\tN - number of games, defaults to 1 (Ignores match setting)");
-        System.out.println("\tM - Play full match of X games, typically 1,3,5 games. (Optional, overrides N)");
-        System.out.println("\tT - Type of tournament to run with all provided decks (Bracket, RoundRobin, Swiss)");
-        System.out.println("\tP - Amount of players per match (used only with Tournaments, defaults to 2)");
-        System.out.println("\tF - format of games, defaults to constructed");
-        System.out.println("\tS - RNG seed for simulation");
-        System.out.println("\tA - AI profile per player, in the same order as the decks (e.g. -a Default Experimental)");
-        System.out.println("\tc - Clock flag. Set the maximum time in seconds before calling the match a draw, defaults to 120.");
-        System.out.println("\tq - Quiet flag. Output just the game result, not the entire game log.");
+        System.out.println("Run automated Forge games without a graphical interface.");
+        System.out.println();
+        System.out.println("Usage:");
+        System.out.println("  ./headless.sh sim -d <deck1> <deck2> [more decks...] [options]");
+        System.out.println();
+        System.out.println("Decks may be Forge deck names or .dck file paths. Quote names containing spaces.");
+        System.out.println();
+        System.out.println("Options:");
+        System.out.println("  -d <decks...>       Decks to play. At least two are required.");
+        System.out.println("  -D <directory>      Directory used to resolve deck filenames.");
+        System.out.println("  -n <games>          Number of independent games to run (default: 1).");
+        System.out.println("  -m <games>          Play a match of this many games instead of using -n.");
+        System.out.println("  -f <format>         Forge game type, such as Constructed or Commander.");
+        System.out.println("  -s <seed>           Seed Forge's random-number generator for repeatable runs.");
+        System.out.println("  -a <profiles...>    AI profile for each deck, in deck order.");
+        System.out.println("  -r                  Use lightweight random controllers instead of Forge AI.");
+        System.out.println("  -c <seconds>        End a game as a draw after this timeout (default: 120).");
+        System.out.println("  -q                  Print only game results, without the full game log.");
+        System.out.println("  -t <type>           Run a Bracket, RoundRobin, or Swiss tournament.");
+        System.out.println("  -p <players>        Players per tournament match (default: 2).");
+        System.out.println("  -h, --help          Show this help and exit.");
+        System.out.println();
+        System.out.println("Examples:");
+        System.out.println("  ./headless.sh sim -d red.dck blue.dck -n 20 -s 42");
+        System.out.println("  ./headless.sh sim -d deck-a.dck deck-b.dck -a Default Experimental -n 50 -q");
     }
 
     public static void simulateSingleMatch(final Match mc, int iGame, boolean outputGamelog) {
@@ -374,15 +403,18 @@ public class SimulateMatch {
         return null;
     }
 
-    private static Deck deckFromCommandLineParameter(String deckname, GameType type) {
+    static Deck deckFromCommandLineParameter(String deckname, GameType type) {
         int dotpos = deckname.lastIndexOf('.');
         if (dotpos > 0 && dotpos == deckname.length() - 4) {
-            String baseDir = type.equals(GameType.Commander) ?
-                    ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
-
-            File f = new File(baseDir + deckname);
+            File f = new File(deckname);
             if (!f.exists()) {
-                System.out.println("No deck found in " + baseDir);
+                String baseDir = type.equals(GameType.Commander) ?
+                        ForgeConstants.DECK_COMMANDER_DIR : ForgeConstants.DECK_CONSTRUCTED_DIR;
+                f = new File(baseDir, deckname);
+            }
+            if (!f.exists()) {
+                System.out.println("No deck found: " + deckname);
+                return null;
             }
 
             return DeckSerializer.fromFile(f);

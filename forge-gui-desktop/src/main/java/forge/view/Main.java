@@ -22,6 +22,7 @@ import forge.Singletons;
 import forge.error.ExceptionHandler;
 import forge.gui.GuiBase;
 import forge.gui.card.CardReaderExperiments;
+import forge.headless.SimulateMatch;
 import forge.util.BuildInfo;
 import io.sentry.Sentry;
 
