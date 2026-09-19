@@ -266,6 +266,7 @@ final class BridgeSession {
         game = match.createGame();
         seatPlayers = new ArrayList<>(game.getPlayers());
         if (params.path("debug_state").asBoolean(false)) {
+            game.getAction().setDebugCompleteTerminalSba(true);
             debugState = new BridgeDebugState(game, seatPlayers);
             for (LobbyPlayerBridge lobby : lobbyPlayers.values()) {
                 lobby.getController().setDebugState(debugState);

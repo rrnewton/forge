@@ -78,6 +78,28 @@ public class GameAction {
     private final Game game;
 
     private boolean holdCheckingStaticAbilities = false;
+    // Experimental local state-oracle mode only. Ordinary Forge behavior is unchanged.
+    private boolean debugCompleteTerminalSba;
+    private boolean deferTerminalPublication;
+    private GameEndReason deferredTerminalReason;
+    private List<Player> deferredTerminalLosers;
+
+    public void setDebugCompleteTerminalSba(boolean enabled) {
+        if (enabled && game.getPlayers().size() != 2) {
+            throw new IllegalArgumentException("Terminal state oracle currently supports two players only");
+        }
+        debugCompleteTerminalSba = enabled;
+    }
+
+    private void publishDeferredTerminalState() {
+        for (Player player : deferredTerminalLosers) {
+            game.onPlayerLost(player);
+        }
+        game.setGameOver(deferredTerminalReason);
+        game.getStack().clearSimultaneousStack();
+        deferredTerminalReason = null;
+        deferredTerminalLosers = null;
+    }
 
     private final static Comparator<StaticAbility> effectOrder = Comparator.comparing(StaticAbility::isCharacteristicDefining).reversed()
             .thenComparing(StaticAbility::getTimestamp);
@@ -1398,8 +1420,14 @@ public class GameAction {
         return checkStateEffects(runEvents, Sets.newHashSet());
     }
     public boolean checkStateEffects(final boolean runEvents, final Set<Card> affectedCards) {
-        // check game over early for win conditions such as Platinum Angel + Hurricane lethal for both players
-        checkGameOverCondition();
+        // Determine outcomes before SBAs for Platinum Angel + simultaneous lethal.
+        // In the opt-in oracle, publish only after the SAME permanent-SBA event.
+        deferTerminalPublication = debugCompleteTerminalSba;
+        try {
+            checkGameOverCondition();
+        } finally {
+            deferTerminalPublication = false;
+        }
         if (game.isGameOver()) {
             return false;
         }
@@ -1593,6 +1621,15 @@ public class GameAction {
             sacrifice(sacrificeList, null, true, mapParams);
 
             setHoldCheckingStaticAbilities(false);
+
+            if (deferredTerminalReason != null) {
+                // CR 704.3: the already-determined losses and these destructions
+                // are simultaneous. CR 104.1: no subsequent triggered abilities
+                // resolve and no second SBA event is performed after the game ends.
+                publishDeferredTerminalState();
+                performedSBA = true;
+                break;
+            }
 
             table.triggerChangesZoneAll(game, null);
 
@@ -1909,7 +1946,7 @@ public class GameAction {
     }
 
     public void checkGameOverCondition() {
-        if (game.isGameOver()) {
+        if (game.isGameOver() || deferredTerminalReason != null) {
             return;
         }
 
@@ -1954,7 +1991,7 @@ public class GameAction {
             }
         }
 
-        if (losers != null) {
+        if (losers != null && !deferTerminalPublication) {
             for (Player p : losers) {
                 game.onPlayerLost(p);
             }
@@ -1984,6 +2021,11 @@ public class GameAction {
             }
         }
 
+        if (deferTerminalPublication) {
+            deferredTerminalReason = reason;
+            deferredTerminalLosers = losers == null ? Collections.emptyList() : losers;
+            return;
+        }
         // Clear Simultaneous triggers at the end of the game
         game.setGameOver(reason);
         game.getStack().clearSimultaneousStack();
