@@ -28,7 +28,30 @@ final class BridgeDebugState {
     private final BlockingQueue<ObjectNode> snapshots = new ArrayBlockingQueue<>(1);
     private final BlockingQueue<Command> commands = new ArrayBlockingQueue<>(1);
     private final Map<String, String> identities = new HashMap<>();
+    private final BlockingQueue<JsonNode> damagePlans = new ArrayBlockingQueue<>(1);
+    private final List<JsonNode> pendingDamage = new ArrayList<>();
     private boolean initialized;
+
+    void submitDamagePlan(JsonNode plan) {
+        put(damagePlans, plan.deepCopy());
+    }
+
+    JsonNode takeDamageAssignment(JsonNode attacker) {
+        if (pendingDamage.isEmpty()) {
+            take(damagePlans).path("assignments").forEach(pendingDamage::add);
+        }
+        for (int index = 0; index < pendingDamage.size(); index++) {
+            JsonNode entry = pendingDamage.get(index);
+            JsonNode candidate = entry.path("attacker");
+            if (candidate.path("name").equals(attacker.path("name"))
+                    && candidate.path("idx").equals(attacker.path("idx"))
+                    && candidate.path("controller").equals(attacker.path("controller"))) {
+                pendingDamage.remove(index);
+                return entry.path("blockers");
+            }
+        }
+        throw new IllegalStateException("No exact remote damage assignment for " + attacker);
+    }
 
     BridgeDebugState(Game game, List<Player> players) {
         this.game = game;

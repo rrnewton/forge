@@ -25,6 +25,7 @@ import forge.ai.ComputerUtilAbility;
 import forge.ai.PlayerControllerAi;
 import forge.game.Game;
 import forge.game.GameEntity;
+import forge.game.keyword.Keyword;
 import forge.game.card.Card;
 import forge.game.card.CardCollection;
 import forge.game.card.CardCollectionView;
@@ -706,7 +707,7 @@ final class BridgeController extends PlayerControllerAi {
         if (blockers.size() > 1) {
             multiBlockerDamageObserved = true;
         }
-        if (!fullGame || !forgeAiSeat || blockers.size() < 2) {
+        if (debugState != null || !fullGame || !forgeAiSeat || blockers.size() < 2) {
             return super.orderBlockers(attacker, blockers);
         }
         ChoiceDecisionTicket ticket = take(choiceDecisions, "Forge AI damage-assignment order permit");
@@ -725,6 +726,9 @@ final class BridgeController extends PlayerControllerAi {
             CardCollectionView remaining, int damageDealt, GameEntity defender, boolean overrideOrder) {
         if (blockers.size() > 1) {
             multiBlockerDamageObserved = true;
+        }
+        if (debugState != null && blockers.size() > 1 && damageDealt > 0 && defender != null) {
+            return replayDebugDamage(attacker, blockers, damageDealt);
         }
         if (!fullGame || !forgeAiSeat || blockers.size() < 2) {
             return super.assignCombatDamage(attacker, blockers, remaining, damageDealt, defender, overrideOrder);
@@ -750,6 +754,36 @@ final class BridgeController extends PlayerControllerAi {
             ticket.result.completeExceptionally(e);
             throw e;
         }
+    }
+
+    private Map<Card, Integer> replayDebugDamage(Card attacker, CardCollectionView blockers, int damage) {
+        JsonNode selected = debugState.takeDamageAssignment(cardReference(attacker));
+        Map<Card, Integer> result = new LinkedHashMap<>();
+        int assigned = 0;
+        for (JsonNode entry : selected) {
+            Card blocker = exactCombatCard(blockers, entry.path("blocker"), "damage recipient");
+            int amount = entry.path("damage").asInt(-1);
+            if (amount < 0 || result.put(blocker, amount) != null) {
+                throw new IllegalStateException("Invalid repeated/negative damage assignment: " + selected);
+            }
+            assigned += amount;
+        }
+        if (assigned > damage) {
+            throw new IllegalStateException("Remote damage exceeds Forge power: " + selected);
+        }
+        if (assigned < damage) {
+            if (!attacker.hasKeyword(Keyword.TRAMPLE)) {
+                throw new IllegalStateException("Unassigned damage without trample: " + selected);
+            }
+            for (Card blocker : blockers) {
+                int lethal = attacker.hasKeyword(Keyword.DEATHTOUCH) ? 1 : Math.max(0, blocker.getLethalDamage());
+                if (result.getOrDefault(blocker, 0) < lethal) {
+                    throw new IllegalStateException("Trample assigned before every blocker is lethal: " + selected);
+                }
+            }
+            result.put(null, damage - assigned);
+        }
+        return result;
     }
 
     private void completeDamageOrder(ChoiceDecisionTicket ticket, Iterable<Card> ordered) {

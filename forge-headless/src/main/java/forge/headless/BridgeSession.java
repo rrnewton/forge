@@ -159,6 +159,11 @@ final class BridgeSession {
             debugState.initialize(params);
             sendResult(id, BridgeTransport.JSON.createObjectNode().put("accepted", true));
             break;
+        case "debug_damage_plan":
+            requireNotification(id, method);
+            if (debugState == null) { throw new BridgeFailure("debug_disabled", "Debug mode not negotiated"); }
+            debugState.submitDamagePlan(params);
+            break;
         case "debug_checkpoint":
             requireRequest(id, method);
             if (debugState == null) { throw new BridgeFailure("debug_disabled", "Debug mode not negotiated"); }
