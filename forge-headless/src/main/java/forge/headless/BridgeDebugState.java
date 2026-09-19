@@ -18,6 +18,7 @@ import forge.card.MagicColor;
 import forge.game.Game;
 import forge.game.card.Card;
 import forge.game.player.Player;
+import forge.game.phase.PhaseType;
 import forge.game.zone.ZoneType;
 
 /** Local test-only rendezvous. All snapshots are captured on the game thread. */
@@ -38,7 +39,13 @@ final class BridgeDebugState {
 
     JsonNode takeDamageAssignment(JsonNode attacker) {
         if (pendingDamage.isEmpty()) {
-            take(damagePlans).path("assignments").forEach(pendingDamage::add);
+            JsonNode plan = take(damagePlans);
+            boolean firstStrike = game.getPhaseHandler().getPhase() == PhaseType.COMBAT_FIRST_STRIKE_DAMAGE;
+            if (!plan.path("first_strike_step").isBoolean()
+                    || plan.path("first_strike_step").asBoolean() != firstStrike) {
+                throw new IllegalStateException("Damage plan arrived in the wrong combat step: " + plan);
+            }
+            plan.path("assignments").forEach(pendingDamage::add);
         }
         for (int index = 0; index < pendingDamage.size(); index++) {
             JsonNode entry = pendingDamage.get(index);
@@ -153,6 +160,9 @@ final class BridgeDebugState {
     }
 
     private ObjectNode snapshot(boolean terminal) {
+        if (!pendingDamage.isEmpty() || !damagePlans.isEmpty()) {
+            throw new IllegalStateException("Unconsumed combat damage input at state checkpoint");
+        }
         ObjectNode result = BridgeTransport.JSON.createObjectNode();
         result.put("turn", game.getPhaseHandler().getTurn());
         result.put("active_seat", game.getPhaseHandler().getPlayerTurn().getId() + 1);
