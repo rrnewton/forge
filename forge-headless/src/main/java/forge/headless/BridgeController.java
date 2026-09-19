@@ -41,6 +41,11 @@ import forge.item.PaperCard;
 /** Protocol-synchronized controller around Forge's real AI and remote replay seats. */
 final class BridgeController extends PlayerControllerAi {
     private static final long WAIT_SECONDS = 30;
+    private BridgeDebugState debugState;
+
+    void setDebugState(BridgeDebugState state) {
+        debugState = state;
+    }
 
     private final int seat;
     private final boolean forgeAiSeat;
@@ -198,7 +203,8 @@ final class BridgeController extends PlayerControllerAi {
         String authoritativePhase = context.path("phase").asText("");
         String actionType = action.path("type").asText();
         if ("choose".equals(actionType)) {
-            if (!"spell_targets".equals(action.path("choice_kind").asText())) {
+            if (!"spell_targets".equals(action.path("choice_kind").asText())
+                    && !(debugState != null && "discard".equals(action.path("choice_kind").asText()))) {
                 throw new IllegalStateException("Unsupported remote choice: " + action);
             }
             RemoteChoiceTicket ticket = new RemoteChoiceTicket(action.deepCopy(), context.deepCopy());
@@ -329,6 +335,7 @@ final class BridgeController extends PlayerControllerAi {
 
     @Override
     public List<SpellAbility> chooseSpellAbilityToPlay() {
+        if (debugState != null) { return chooseDebugAbility(); }
         if (!fullGame) {
             return super.chooseSpellAbilityToPlay();
         }
@@ -546,6 +553,32 @@ final class BridgeController extends PlayerControllerAi {
         }
     }
 
+
+    private List<SpellAbility> chooseDebugAbility() {
+        debugState.initializeOnGameThread();
+        if (getGame().getPhaseHandler().getPlayerTurn() != player
+                || !getGame().getPhaseHandler().getPhase().isMain()
+                || !getGame().getStack().isEmpty()) {
+            return null;
+        }
+        BridgeDebugState.Command command = debugState.priority();
+        if (forgeAiSeat) {
+            if (command.action != null) { throw new IllegalStateException("Replay action sent to Forge AI"); }
+            try {
+                List<SpellAbility> choices = super.chooseSpellAbilityToPlay();
+                SpellAbility choice = choices == null || choices.isEmpty() ? null : choices.get(0);
+                command.result.complete(choice == null ? passAction() : describeAction(choice));
+                return choice == null ? null : Collections.singletonList(choice);
+            } catch (RuntimeException error) {
+                command.result.completeExceptionally(error);
+                throw error;
+            }
+        }
+        if (command.action == null) { throw new IllegalStateException("Forge decision requested from replay seat"); }
+        SpellAbility choice = matchRemoteAction(command.action);
+        return choice == null ? null : Collections.singletonList(choice);
+    }
+
     @Override
     public boolean playChosenSpellAbility(SpellAbility ability) {
         if (!fullGame || forgeAiSeat || pendingRemoteCast == null) {
@@ -735,6 +768,29 @@ final class BridgeController extends PlayerControllerAi {
 
     @Override
     public CardCollectionView chooseCardsToDiscardToMaximumHandSize(int numDiscard) {
+        if (debugState != null && !forgeAiSeat && numDiscard != 0) {
+            RemoteChoiceTicket ticket = take(remoteChoices, "remote discard choice");
+            if (!"discard".equals(ticket.action.path("choice_kind").asText())
+                    || ticket.action.path("selections").size() != numDiscard) {
+                throw new IllegalStateException("Expected exact remote discard: " + ticket.action);
+            }
+            CardCollection chosen = new CardCollection();
+            for (JsonNode reference : ticket.action.path("selections")) {
+                Card found = null;
+                for (Card card : player.getCardsIn(ZoneType.Hand)) {
+                    if (card.getName().equals(reference.path("name").asText())
+                            && sameNameIndex(card) == reference.path("idx").asInt()) {
+                        found = card;
+                        break;
+                    }
+                }
+                if (found == null || chosen.contains(found)) {
+                    throw new IllegalStateException("Invalid remote discard reference: " + reference);
+                }
+                chosen.add(found);
+            }
+            return chosen;
+        }
         if (!fullGame || !forgeAiSeat || numDiscard == 0) {
             return super.chooseCardsToDiscardToMaximumHandSize(numDiscard);
         }
@@ -1231,7 +1287,7 @@ final class BridgeController extends PlayerControllerAi {
                 }
                 ability.getTargets().add(targetPlayer);
             } else if ("card".equals(target.path("kind").asText())) {
-                Card card = exactOpponentCard(target.path("card"), "spell target");
+                Card card = exactBattlefieldCard(target.path("card"), "spell target");
                 if (!ability.canTarget(card)) {
                     throw new IllegalStateException("Remote spell target is not legal: " + target);
                 }
@@ -1240,12 +1296,13 @@ final class BridgeController extends PlayerControllerAi {
         }
     }
 
-    private Card exactOpponentCard(JsonNode reference, String label) {
+    private Card exactBattlefieldCard(JsonNode reference, String label) {
         String name = reference.path("name").asText();
         int wantedIndex = reference.path("idx").asInt(0);
         List<Card> matches = new ArrayList<>();
         for (Player candidate : getGame().getPlayers()) {
-            if (candidate == player) {
+            int requestedController = reference.path("controller").asInt(0);
+            if (requestedController == 0 ? candidate == player : candidate.getId() + 1 != requestedController) {
                 continue;
             }
             for (Card card : candidate.getCardsIn(ZoneType.Battlefield)) {
@@ -1256,7 +1313,7 @@ final class BridgeController extends PlayerControllerAi {
         }
         if (matches.size() != 1) {
             throw new IllegalStateException("Remote " + label + " matched " + matches.size()
-                    + " opposing Forge cards: " + reference);
+                    + " Forge battlefield cards: " + reference);
         }
         return matches.get(0);
     }

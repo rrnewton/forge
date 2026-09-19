@@ -46,6 +46,7 @@ final class BridgeSession {
     private final Map<Integer, LobbyPlayerBridge> lobbyPlayers = new HashMap<>();
 
     private Game game;
+    private BridgeDebugState debugState;
     private List<Player> seatPlayers;
     private Match match;
     private Thread gameThread;
@@ -97,6 +98,7 @@ final class BridgeSession {
         capabilities.add("event.reveal.library_bag");
         capabilities.add("event.opponent_action.replay");
         capabilities.add("mode.full_game_loop");
+        capabilities.add("debug.observed_state.v1");
 
         ObjectNode request = rpcMessage();
         request.put("id", HELLO_REQUEST_ID);
@@ -150,6 +152,17 @@ final class BridgeSession {
         case "opponent_action":
             requireNotification(id, method);
             handleOpponentAction(params);
+            break;
+        case "debug_initialize":
+            requireRequest(id, method);
+            if (debugState == null) { throw new BridgeFailure("debug_disabled", "Debug mode not negotiated"); }
+            debugState.initialize(params);
+            sendResult(id, BridgeTransport.JSON.createObjectNode().put("accepted", true));
+            break;
+        case "debug_checkpoint":
+            requireRequest(id, method);
+            if (debugState == null) { throw new BridgeFailure("debug_disabled", "Debug mode not negotiated"); }
+            sendResult(id, debugState.checkpoint());
             break;
         case "state_digest":
             requireNotification(id, method);
@@ -247,6 +260,12 @@ final class BridgeSession {
         match = new Match(rules, registeredPlayers, "Bridge-" + gameId);
         game = match.createGame();
         seatPlayers = new ArrayList<>(game.getPlayers());
+        if (params.path("debug_state").asBoolean(false)) {
+            debugState = new BridgeDebugState(game, seatPlayers);
+            for (LobbyPlayerBridge lobby : lobbyPlayers.values()) {
+                lobby.getController().setDebugState(debugState);
+            }
+        }
         if (options.isSkeleton()) {
             initializeDeckZones(decks);
             Player startingPlayer = playerForSeat(startingSeat);
@@ -340,6 +359,7 @@ final class BridgeSession {
         String kind = requireText(params, "kind");
         switch (kind) {
         case "priority":
+            if (debugState != null) { return debugState.decide(); }
             JsonNode context = params.path("context");
             int turn = context.path("turn").asInt();
             if (context.path("active_seat").asInt() == controlledSeat
@@ -423,6 +443,12 @@ final class BridgeSession {
         int seat = requireInt(params, "seat");
         if (seat == controlledSeat) {
             throw new BridgeFailure("opponent_seat", "opponent_action named the Forge AI seat");
+        }
+        String actionType = params.path("action").path("type").asText();
+        if (debugState != null && !"choose".equals(actionType)
+                && !"declare_attackers".equals(actionType) && !"declare_blockers".equals(actionType)) {
+            debugState.replay(params.path("action"));
+            return;
         }
         lobbyPlayers.get(seat).getController().acceptOpponentAction(
                 params.path("action"), params.path("context"), diagnostics);
@@ -569,6 +595,7 @@ final class BridgeSession {
         gameThread = new Thread(() -> {
             try {
                 match.startGame(game);
+                if (debugState != null) { debugState.finished(); }
             } catch (Throwable failure) {
                 gameThreadFailure = failure;
                 diagnostics.println("Forge game thread failure: " + failure);
