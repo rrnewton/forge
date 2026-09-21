@@ -20,6 +20,8 @@ import forge.game.card.Card;
 import forge.game.player.Player;
 import forge.game.phase.PhaseType;
 import forge.game.zone.ZoneType;
+import forge.game.spellability.SpellAbility;
+import forge.game.spellability.SpellAbilityStackInstance;
 
 /** Local test-only rendezvous. All snapshots are captured on the game thread. */
 final class BridgeDebugState {
@@ -34,6 +36,14 @@ final class BridgeDebugState {
     private Throwable fatalFailure;
     private final List<JsonNode> pendingDamage = new ArrayList<>();
     private boolean initialized;
+    private final boolean priorityV2;
+    private long nextTransactionId = 1;
+    private ObjectNode pendingCheckpoint;
+    private boolean commandConsumed;
+
+    boolean usesPriorityV2() {
+        return priorityV2;
+    }
 
     void submitDamagePlan(JsonNode plan) {
         put(damagePlans, plan.deepCopy());
@@ -63,8 +73,13 @@ final class BridgeDebugState {
     }
 
     BridgeDebugState(Game game, List<Player> players) {
+        this(game, players, false);
+    }
+
+    BridgeDebugState(Game game, List<Player> players, boolean priorityV2) {
         this.game = game;
         this.players = players;
+        this.priorityV2 = priorityV2;
     }
 
     void initialize(JsonNode data) {
@@ -120,18 +135,74 @@ final class BridgeDebugState {
     }
 
     Command priority() {
-        put(snapshots, snapshot(false));
+        ObjectNode observed = snapshot(false);
+        synchronized (this) {
+            if (priorityV2) {
+                observed.put("transaction_id", nextTransactionId++);
+                pendingCheckpoint = observed;
+                commandConsumed = false;
+            }
+        }
+        put(snapshots, observed);
         return take(commands);
     }
 
     ObjectNode decide() {
+        return decide(BridgeTransport.JSON.createObjectNode(), 0);
+    }
+
+    ObjectNode decide(JsonNode context, int seat) {
+        consumePriority(context, seat);
         Command command = new Command(null);
         put(commands, command);
         return await(command.result);
     }
 
     void replay(JsonNode action) {
+        replay(action, BridgeTransport.JSON.createObjectNode(), 0);
+    }
+
+    void replay(JsonNode action, JsonNode context, int seat) {
+        consumePriority(context, seat);
         put(commands, new Command(action.deepCopy()));
+    }
+
+    private synchronized void consumePriority(JsonNode context, int seat) {
+        if (!priorityV2) { return; }
+        validatePriorityContext(context, seat);
+        if (commandConsumed) {
+            throw new IllegalStateException("Debug priority transaction already consumed");
+        }
+        commandConsumed = true;
+    }
+
+    synchronized void validateContinuation(JsonNode context, int seat) {
+        if (!priorityV2) { return; }
+        validatePriorityContext(context, seat);
+        if (!commandConsumed) {
+            throw new IllegalStateException("Debug target continuation precedes its priority action");
+        }
+    }
+
+    private void validatePriorityContext(JsonNode context, int seat) {
+        throwIfFailed();
+        if (pendingCheckpoint == null) {
+            throw new IllegalStateException("No pending debug priority transaction");
+        }
+        if (seat != pendingCheckpoint.path("priority_seat").asInt()) {
+            throw new IllegalStateException("Debug command names wrong priority seat: " + seat);
+        }
+        for (String field : new String[]{"transaction_id", "priority_seat", "turn", "phase", "active_seat"}) {
+            JsonNode wanted = pendingCheckpoint.get(field);
+            JsonNode actual = context.get(field);
+            boolean matches = actual != null && (wanted.isIntegralNumber()
+                    ? actual.isIntegralNumber() && actual.canConvertToLong() && actual.longValue() == wanted.longValue()
+                    : wanted.equals(actual));
+            if (!matches) {
+                throw new IllegalStateException("Debug priority transaction mismatch at " + field
+                        + ": expected " + pendingCheckpoint.get(field) + ", received " + context.get(field));
+            }
+        }
     }
 
     void finished() {
@@ -168,9 +239,25 @@ final class BridgeDebugState {
         ObjectNode result = BridgeTransport.JSON.createObjectNode();
         result.put("turn", game.getPhaseHandler().getTurn());
         result.put("active_seat", game.getPhaseHandler().getPlayerTurn().getId() + 1);
-        result.put("phase", game.getPhaseHandler().getPhase().name().toLowerCase());
+        PhaseType phase = game.getPhaseHandler().getPhase();
+        String phaseName = priorityV2
+                ? phase == PhaseType.END_OF_TURN ? "end" : phase.nameForScripts.replace(" ", "").toLowerCase(java.util.Locale.ROOT)
+                : phase.name().toLowerCase(java.util.Locale.ROOT);
+        result.put("phase", phaseName);
         result.put("terminal", terminal);
         result.put("stack_size", game.getStack().size());
+        if (priorityV2 && !terminal) {
+            result.put("priority_seat", game.getPhaseHandler().getPriorityPlayer().getId() + 1);
+            ArrayNode stack = result.putArray("stack");
+            // MagicStack iterates newest first, matching the next object to resolve.
+            for (SpellAbilityStackInstance entry : game.getStack()) {
+                SpellAbility ability = entry.getSpellAbility();
+                ObjectNode item = stack.addObject();
+                item.put("identity", identity(entry.getSourceCard()));
+                item.put("controller", ability.getActivatingPlayer().getId() + 1);
+                item.put("kind", ability.isSpell() ? "spell" : ability.isTrigger() ? "triggered" : "activated");
+            }
+        }
         ArrayNode states = result.putArray("players");
         ArrayNode battlefield = result.putArray("battlefield");
         for (Player player : players) {

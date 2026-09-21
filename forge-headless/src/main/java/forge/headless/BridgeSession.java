@@ -83,6 +83,15 @@ final class BridgeSession {
                     sendErrorResponse(message.get("id"), -32000, e.getMessage());
                 }
                 throw e;
+            } catch (RuntimeException e) {
+                Throwable cause = gameThreadFailure == null ? e : gameThreadFailure;
+                while (cause.getCause() != null) { cause = cause.getCause(); }
+                String code = gameThreadFailure == null ? "bridge_protocol_failure" : "forge_game_failure";
+                sendErrorNotification(code, cause.toString());
+                if (message.has("id")) {
+                    sendErrorResponse(message.get("id"), -32000, cause.toString());
+                }
+                throw e;
             }
         }
         diagnostics.println("Bridge input closed; session exiting");
@@ -99,6 +108,7 @@ final class BridgeSession {
         capabilities.add("event.opponent_action.replay");
         capabilities.add("mode.full_game_loop");
         capabilities.add("debug.observed_state.v1");
+        capabilities.add("debug.priority.v2");
 
         ObjectNode request = rpcMessage();
         request.put("id", HELLO_REQUEST_ID);
@@ -265,9 +275,12 @@ final class BridgeSession {
         match = new Match(rules, registeredPlayers, "Bridge-" + gameId);
         game = match.createGame();
         seatPlayers = new ArrayList<>(game.getPlayers());
+        if (params.path("debug_priority_v2").asBoolean(false) && !params.path("debug_state").asBoolean(false)) {
+            throw new BridgeFailure("debug_disabled", "debug.priority.v2 requires debug_state");
+        }
         if (params.path("debug_state").asBoolean(false)) {
             game.getAction().setDebugCompleteTerminalSba(true);
-            debugState = new BridgeDebugState(game, seatPlayers);
+            debugState = new BridgeDebugState(game, seatPlayers, params.path("debug_priority_v2").asBoolean(false));
             for (LobbyPlayerBridge lobby : lobbyPlayers.values()) {
                 lobby.getController().setDebugState(debugState);
             }
@@ -365,7 +378,7 @@ final class BridgeSession {
         String kind = requireText(params, "kind");
         switch (kind) {
         case "priority":
-            if (debugState != null) { return debugState.decide(); }
+            if (debugState != null) { return debugState.decide(params.path("context"), controlledSeat); }
             JsonNode context = params.path("context");
             int turn = context.path("turn").asInt();
             if (context.path("active_seat").asInt() == controlledSeat
@@ -453,8 +466,12 @@ final class BridgeSession {
         String actionType = params.path("action").path("type").asText();
         if (debugState != null && !"choose".equals(actionType)
                 && !"declare_attackers".equals(actionType) && !"declare_blockers".equals(actionType)) {
-            debugState.replay(params.path("action"));
+            debugState.replay(params.path("action"), params.path("context"), seat);
             return;
+        }
+        if (debugState != null && "choose".equals(actionType)
+                && "spell_targets".equals(params.path("action").path("choice_kind").asText())) {
+            debugState.validateContinuation(params.path("context"), seat);
         }
         lobbyPlayers.get(seat).getController().acceptOpponentAction(
                 params.path("action"), params.path("context"), diagnostics);

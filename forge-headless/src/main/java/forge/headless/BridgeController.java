@@ -557,9 +557,9 @@ final class BridgeController extends PlayerControllerAi {
 
     private List<SpellAbility> chooseDebugAbility() {
         debugState.initializeOnGameThread();
-        if (getGame().getPhaseHandler().getPlayerTurn() != player
+        if (!debugState.usesPriorityV2() && (getGame().getPhaseHandler().getPlayerTurn() != player
                 || !getGame().getPhaseHandler().getPhase().isMain()
-                || !getGame().getStack().isEmpty()) {
+                || !getGame().getStack().isEmpty())) {
             return null;
         }
         BridgeDebugState.Command command = debugState.priority();
