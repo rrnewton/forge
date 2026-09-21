@@ -604,6 +604,7 @@ final class BridgeSession {
                 if (debugState != null) { debugState.finished(); }
             } catch (Throwable failure) {
                 gameThreadFailure = failure;
+                if (debugState != null) { debugState.fail(failure); }
                 diagnostics.println("Forge game thread failure: " + failure);
                 failure.printStackTrace(diagnostics);
             } finally {

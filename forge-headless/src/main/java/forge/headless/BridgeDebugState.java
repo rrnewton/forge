@@ -1,12 +1,12 @@
 package forge.headless;
 
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -26,10 +26,12 @@ final class BridgeDebugState {
     private final Game game;
     private final List<Player> players;
     private final CompletableFuture<JsonNode> initialization = new CompletableFuture<>();
-    private final BlockingQueue<ObjectNode> snapshots = new ArrayBlockingQueue<>(1);
-    private final BlockingQueue<Command> commands = new ArrayBlockingQueue<>(1);
+    private final Deque<ObjectNode> snapshots = new ArrayDeque<>();
+    private final Deque<Command> commands = new ArrayDeque<>();
     private final Map<String, String> identities = new HashMap<>();
-    private final BlockingQueue<JsonNode> damagePlans = new ArrayBlockingQueue<>(1);
+    private final Deque<JsonNode> damagePlans = new ArrayDeque<>();
+    private final CompletableFuture<Void> failure = new CompletableFuture<>();
+    private Throwable fatalFailure;
     private final List<JsonNode> pendingDamage = new ArrayList<>();
     private boolean initialized;
 
@@ -211,33 +213,64 @@ final class BridgeDebugState {
         return result;
     }
 
-    private static <T> T take(BlockingQueue<T> queue) {
-        try {
-            T value = queue.poll(30, TimeUnit.SECONDS);
-            if (value == null) {
-                throw new IllegalStateException("Debug bridge boundary timed out");
+    /** Wake every protocol/game-thread waiter with the original failure. */
+    synchronized void fail(Throwable cause) {
+        if (fatalFailure == null) {
+            fatalFailure = cause;
+            failure.completeExceptionally(cause);
+            notifyAll();
+        }
+    }
+
+    private void throwIfFailed() {
+        if (fatalFailure != null) {
+            throw new IllegalStateException("Forge debug game failed: " + fatalFailure, fatalFailure);
+        }
+    }
+
+    private synchronized <T> T take(Deque<T> queue) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (true) {
+            throwIfFailed();
+            if (!queue.isEmpty()) {
+                T value = queue.removeFirst();
+                notifyAll();
+                return value;
             }
-            return value;
+            waitForQueue(deadline);
+        }
+    }
+
+    private synchronized <T> void put(Deque<T> queue, T value) {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(30);
+        while (true) {
+            throwIfFailed();
+            if (queue.isEmpty()) {
+                queue.addLast(value);
+                notifyAll();
+                return;
+            }
+            waitForQueue(deadline);
+        }
+    }
+
+    private void waitForQueue(long deadline) {
+        long remaining = deadline - System.nanoTime();
+        if (remaining <= 0) {
+            throw new IllegalStateException("Debug bridge boundary timed out");
+        }
+        try {
+            TimeUnit.NANOSECONDS.timedWait(this, remaining);
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Debug bridge interrupted", error);
         }
     }
 
-    private static <T> void put(BlockingQueue<T> queue, T value) {
+    private <T> T await(CompletableFuture<T> future) {
         try {
-            if (!queue.offer(value, 30, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Debug bridge queue timed out");
-            }
-        } catch (InterruptedException error) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("Debug bridge interrupted", error);
-        }
-    }
-
-    private static <T> T await(CompletableFuture<T> future) {
-        try {
-            return future.get(30, TimeUnit.SECONDS);
+            CompletableFuture.anyOf(future, failure).get(30, TimeUnit.SECONDS);
+            return future.join();
         } catch (Exception error) {
             throw new IllegalStateException("Debug bridge operation failed", error);
         }
