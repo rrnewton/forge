@@ -33,11 +33,17 @@ public class BridgeDebugPriorityTest {
     }
 
     private Game game() {
+        return game(false);
+    }
+
+    private Game game(boolean bridge) {
         List<RegisteredPlayer> registered = new ArrayList<>();
         for (int index = 0; index < 2; index++) {
             Deck deck = new Deck("priority witness");
             deck.getMain().add(FModel.getMagicDb().getCommonCards().getCard("Mountain"), 60);
-            registered.add(new RegisteredPlayer(deck).setPlayer(GamePlayerUtil.createAiPlayer("P" + index, index)));
+            registered.add(new RegisteredPlayer(deck).setPlayer(bridge
+                    ? new LobbyPlayerBridge("P" + index, index + 1, false, true, 1)
+                    : GamePlayerUtil.createAiPlayer("P" + index, index)));
         }
         Game game = new Match(new GameRules(GameType.Constructed), registered, "priority witness").createGame();
         game.setAge(GameStage.Play);
@@ -125,6 +131,79 @@ public class BridgeDebugPriorityTest {
             } catch (IllegalStateException expected) {
                 assertTrue(expected.getMessage().contains("already consumed"));
             }
+        } finally {
+            state.fail(new IllegalStateException("test finished"));
+        }
+    }
+
+    @Test
+    public void realControllerStopsOutsideMainOnNonactiveStackPriority() throws Exception {
+        for (boolean ai : new boolean[]{false, true}) {
+            Game game = game();
+            BridgeDebugState state = state(game);
+            Player active = game.getPlayers().get(0);
+            Player responder = game.getPlayers().get(1);
+            spell(game, active, "Lightning Bolt");
+            game.getPhaseHandler().devModeSet(PhaseType.UPKEEP, active);
+            game.getPhaseHandler().setPriority(responder);
+            LobbyPlayerBridge lobby = new LobbyPlayerBridge("response witness", 2, ai, true, 1);
+            BridgeController controller = new BridgeController(game, responder, lobby, 2, ai, true, 1);
+            controller.setDebugState(state);
+            CompletableFuture<List<SpellAbility>> choice = CompletableFuture.supplyAsync(controller::chooseSpellAbilityToPlay);
+            CompletableFuture<ObjectNode> observed = CompletableFuture.supplyAsync(state::checkpoint);
+            try {
+                ObjectNode snapshot = observed.get(2, TimeUnit.SECONDS);
+                assertEquals("upkeep", snapshot.path("phase").asText());
+                assertEquals(2, snapshot.path("priority_seat").asInt());
+                assertEquals(1, snapshot.path("stack_size").asInt());
+                assertFalse("real controller must wait for the observed transaction", choice.isDone());
+                if (ai) {
+                    assertEquals("pass", state.decide(context(snapshot), 2).path("type").asText());
+                } else {
+                    state.replay(BridgeTransport.JSON.createObjectNode().put("type", "pass"), context(snapshot), 2);
+                }
+                assertNull(choice.get(2, TimeUnit.SECONDS));
+            } finally {
+                state.fail(new IllegalStateException("test finished"));
+            }
+        }
+    }
+
+    @Test
+    public void twoPassesResolveOnlyTopSpellThenActivePlayerGetsFreshPriority() throws Exception {
+        Game game = game(true);
+        BridgeDebugState state = state(game);
+        Player active = game.getPlayers().get(0);
+        Player responder = game.getPlayers().get(1);
+        for (Player player : game.getPlayers()) {
+            ((BridgeController) player.getController()).setDebugState(state);
+        }
+        spell(game, active, "Lightning Bolt");
+        spell(game, responder, "Shock");
+        game.getPhaseHandler().setPriority(active);
+        game.getPhaseHandler().onStackResolved();
+        CompletableFuture<Void> steps = CompletableFuture.runAsync(() -> {
+            for (int index = 0; index < 3; index++) {
+                game.getPhaseHandler().mainLoopStep();
+            }
+        });
+        try {
+            int[] expectedSeats = {1, 2, 1};
+            int[] expectedDepths = {2, 2, 1};
+            for (int index = 0; index < 3; index++) {
+                ObjectNode snapshot = CompletableFuture.supplyAsync(state::checkpoint).get(2, TimeUnit.SECONDS);
+                assertEquals(index + 1, snapshot.path("transaction_id").asLong());
+                assertEquals(expectedSeats[index], snapshot.path("priority_seat").asInt());
+                assertEquals(expectedDepths[index], snapshot.path("stack_size").asInt());
+                if (index == 2) {
+                    assertEquals("CARD#Bolt", snapshot.path("stack").get(0).path("identity").asText());
+                    assertEquals(18, snapshot.path("players").get(0).path("life").asInt());
+                    assertEquals(20, snapshot.path("players").get(1).path("life").asInt());
+                }
+                state.replay(BridgeTransport.JSON.createObjectNode().put("type", "pass"), context(snapshot), expectedSeats[index]);
+            }
+            steps.get(2, TimeUnit.SECONDS);
+            assertEquals(1, game.getStack().size());
         } finally {
             state.fail(new IllegalStateException("test finished"));
         }
